@@ -6,6 +6,7 @@ import {
   recurringPlanSchema
 } from '@subscription/shared';
 import { Router } from 'express';
+import { z } from 'zod';
 
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
@@ -14,6 +15,11 @@ import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middl
 export const catalogRouter = Router();
 
 catalogRouter.use(requireAuth);
+
+const productListQuerySchema = paginationSchema.extend({
+  search: z.string().trim().optional(),
+  sortBy: z.enum(['newest', 'name', 'price']).default('newest')
+});
 
 catalogRouter.get('/categories', async (_request, response) => {
   const categories = await prisma.productCategory.findMany({
@@ -25,18 +31,55 @@ catalogRouter.get('/categories', async (_request, response) => {
 
 catalogRouter.get('/products', async (request, response, next) => {
   try {
-    const { page, pageSize } = paginationSchema.parse(request.query);
+    const { page, pageSize, search, sortBy } = productListQuerySchema.parse(request.query);
+    const normalizedSearch = search?.trim();
+    const where = normalizedSearch
+      ? {
+          OR: [
+            { name: { contains: normalizedSearch, mode: 'insensitive' as const } },
+            { slug: { contains: normalizedSearch, mode: 'insensitive' as const } },
+            { description: { contains: normalizedSearch, mode: 'insensitive' as const } }
+          ]
+        }
+      : undefined;
+    const orderBy =
+      sortBy === 'name'
+        ? [{ name: 'asc' as const }, { createdAt: 'desc' as const }]
+        : sortBy === 'price'
+          ? [{ baseSalesPrice: 'asc' as const }, { createdAt: 'desc' as const }]
+          : [{ createdAt: 'desc' as const }];
+
     const [items, total] = await Promise.all([
       prisma.product.findMany({
+        where,
         include: { category: true, variants: true, planPricing: true },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize
       }),
-      prisma.product.count()
+      prisma.product.count({ where })
     ]);
 
     response.json({ data: { items, page, pageSize, total } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+catalogRouter.get('/products/:slug', async (request, response, next) => {
+  try {
+    const slug = String(Array.isArray(request.params.slug) ? request.params.slug[0] : request.params.slug);
+
+    const product = await prisma.product.findUnique({
+      where: { slug },
+      include: { category: true, variants: true, planPricing: true }
+    });
+
+    if (!product) {
+      throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+    }
+
+    response.json({ data: product });
   } catch (error) {
     next(error);
   }

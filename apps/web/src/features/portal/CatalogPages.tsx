@@ -3,22 +3,27 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { Surface } from '../../components/layout';
-import { apiRequest, formatCurrency, planIntervalLabel, type Product, type RecurringPlan } from '../../lib/api';
+import { apiRequest, formatCurrency, planIntervalLabel, type PaginatedResponse, type Product, type RecurringPlan } from '../../lib/api';
 import { useCartStore } from '../../lib/cart';
 import { useSession } from '../../lib/session';
+
+const SHOP_PAGE_SIZE = 24;
 
 export function ShopPage() {
   const { isAuthenticated, token } = useSession();
   const addItem = useCartStore((state) => state.addItem);
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'price' | 'name'>('price');
+  const [sortBy, setSortBy] = useState<'newest' | 'price' | 'name'>('newest');
+  const [page, setPage] = useState(1);
   const [selectedPlans, setSelectedPlans] = useState<Record<string, string>>({});
+  const normalizedSearch = search.trim();
 
   const productsQuery = useQuery({
-    queryKey: ['portal-products'],
+    queryKey: ['portal-products', page, normalizedSearch, sortBy],
     queryFn: () =>
-      apiRequest<{ items: Product[] }>('/products?page=1&pageSize=50', { token }).then(
-        (result) => result.items
+      apiRequest<PaginatedResponse<Product>>(
+        `/products?page=${page}&pageSize=${SHOP_PAGE_SIZE}&sortBy=${sortBy}${normalizedSearch ? `&search=${encodeURIComponent(normalizedSearch)}` : ''}`,
+        { token }
       ),
     enabled: isAuthenticated
   });
@@ -29,21 +34,13 @@ export function ShopPage() {
     enabled: isAuthenticated
   });
 
-  const products = useMemo(() => {
-    const items = [...(productsQuery.data ?? [])].filter((product) =>
-      product.name.toLowerCase().includes(search.trim().toLowerCase())
-    );
+  const products = useMemo(() => productsQuery.data?.items ?? [], [productsQuery.data?.items]);
+  const totalProducts = productsQuery.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalProducts / SHOP_PAGE_SIZE));
 
-    items.sort((left, right) => {
-      if (sortBy === 'name') {
-        return left.name.localeCompare(right.name);
-      }
-
-      return productPrice(left, selectedPlans[left.id]) - productPrice(right, selectedPlans[right.id]);
-    });
-
-    return items;
-  }, [productsQuery.data, search, selectedPlans, sortBy]);
+  useEffect(() => {
+    setPage(1);
+  }, [normalizedSearch, sortBy]);
 
   if (!isAuthenticated) {
     return <AuthRequiredMessage title="Shop" />;
@@ -53,10 +50,21 @@ export function ShopPage() {
     <Surface title="Shop">
       <div className="mb-5 grid gap-3 md:grid-cols-[1fr_220px]">
         <input className={fieldClass} onChange={(event) => setSearch(event.target.value)} placeholder="Search products" value={search} />
-        <select className={fieldClass} onChange={(event) => setSortBy(event.target.value as 'price' | 'name')} value={sortBy}>
+        <select className={fieldClass} onChange={(event) => setSortBy(event.target.value as 'newest' | 'price' | 'name')} value={sortBy}>
+          <option value="newest">Newest first</option>
           <option value="price">Sort by price</option>
           <option value="name">Sort by name</option>
         </select>
+      </div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
+        <p>
+          Showing {products.length ? (page - 1) * SHOP_PAGE_SIZE + 1 : 0}-{Math.min(page * SHOP_PAGE_SIZE, totalProducts)} of {totalProducts} products
+        </p>
+        <PaginationControls
+          currentPage={page}
+          onPageChange={setPage}
+          totalPages={totalPages}
+        />
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {products.map((product) => {
@@ -127,6 +135,9 @@ export function ShopPage() {
           );
         })}
       </div>
+      {products.length === 0 ? (
+        <p className="mt-5 text-sm text-slate-400">No products matched the current filters.</p>
+      ) : null}
     </Surface>
   );
 }
@@ -138,12 +149,9 @@ export function ProductPage() {
   const [selectedPlanId, setSelectedPlanId] = useState('');
 
   const productsQuery = useQuery({
-    queryKey: ['product-detail'],
-    queryFn: () =>
-      apiRequest<{ items: Product[] }>('/products?page=1&pageSize=50', { token }).then(
-        (result) => result.items
-      ),
-    enabled: isAuthenticated
+    queryKey: ['product-detail', slug],
+    queryFn: () => apiRequest<Product>(`/products/${slug}`, { token }),
+    enabled: isAuthenticated && Boolean(slug)
   });
 
   const plansQuery = useQuery({
@@ -156,7 +164,7 @@ export function ProductPage() {
     return <AuthRequiredMessage title="Product" />;
   }
 
-  const product = productsQuery.data?.find((entry) => entry.slug === slug) ?? null;
+  const product = productsQuery.data ?? null;
   const activePlanId = selectedPlanId || (product ? defaultPlanId(product) : '');
   const plan = plansQuery.data?.find((entry) => entry.id === activePlanId) ?? null;
   const images = product ? productImages(product) : [];
@@ -292,7 +300,7 @@ function ProductSlideshow({
 
   return (
     <div className={`relative overflow-hidden border border-white/10 bg-slate-900/60 ${className}`}>
-      <img alt={`${name} ${activeIndex + 1}`} className="h-full w-full object-cover" src={images[activeIndex]} />
+      <img alt={`${name} ${activeIndex + 1}`} className="h-full w-full object-cover" decoding="async" loading="lazy" src={images[activeIndex]} />
       {images.length > 1 ? (
         <>
           <div className="absolute inset-x-3 bottom-3 flex items-center justify-between">
@@ -329,6 +337,44 @@ function ProductSlideshow({
           </button>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function PaginationControls({
+  currentPage,
+  onPageChange,
+  totalPages
+}: Readonly<{
+  currentPage: number;
+  onPageChange: (page: number) => void;
+  totalPages: number;
+}>) {
+  if (totalPages <= 1) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        className="rounded-full border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={currentPage <= 1}
+        onClick={() => onPageChange(currentPage - 1)}
+        type="button"
+      >
+        Previous
+      </button>
+      <span className="min-w-[104px] text-center text-sm text-slate-300">
+        Page {currentPage} / {totalPages}
+      </span>
+      <button
+        className="rounded-full border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={currentPage >= totalPages}
+        onClick={() => onPageChange(currentPage + 1)}
+        type="button"
+      >
+        Next
+      </button>
     </div>
   );
 }

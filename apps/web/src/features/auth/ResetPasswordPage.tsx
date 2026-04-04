@@ -16,7 +16,6 @@ export function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [resetLink, setResetLink] = useState<string | null>(null);
 
   const requestMutation = useMutation({
     mutationFn: () =>
@@ -27,11 +26,9 @@ export function ResetPasswordPage() {
     onSuccess: (result) => {
       setError(null);
       setMessage(result.message);
-      setResetLink(result.resetLink ?? null);
     },
     onError: (mutationError) => {
       setMessage(null);
-      setResetLink(null);
       setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to request reset');
     }
   });
@@ -59,6 +56,7 @@ export function ResetPasswordPage() {
 
   const title = useMemo(() => (isResetMode ? 'Set new password' : 'Forgot password'), [isResetMode]);
   const hasExpiredLinkError = isResetMode && error === 'Reset link is invalid or expired';
+  const isSubmitting = isResetMode ? confirmMutation.isPending : requestMutation.isPending;
 
   return (
     <AuthShell
@@ -89,11 +87,6 @@ export function ResetPasswordPage() {
         ) : null}
         {message ? <MessageBanner tone="success">{message}</MessageBanner> : null}
         {error ? <MessageBanner tone="error">{error}</MessageBanner> : null}
-        {!isResetMode && resetLink ? (
-          <a className="app-btn app-btn-secondary justify-self-start" href={resetLink}>
-            Open demo reset link
-          </a>
-        ) : null}
         {hasExpiredLinkError ? (
           <Link className="app-btn app-btn-secondary justify-self-start" to="/reset-password">
             Request New Link
@@ -102,12 +95,26 @@ export function ResetPasswordPage() {
         <div className="flex flex-wrap gap-3">
           <button
             className="app-btn app-btn-primary"
+            disabled={isSubmitting}
             onClick={() => (isResetMode ? confirmMutation.mutate() : requestMutation.mutate())}
             type="button"
           >
-            {isResetMode ? 'Update Password' : 'Submit'}
+            {isSubmitting ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                {isResetMode ? 'Updating...' : 'Sending...'}
+              </>
+            ) : isResetMode ? (
+              'Update Password'
+            ) : (
+              'Submit'
+            )}
           </button>
-          <Link className="app-btn app-btn-secondary" to="/login">
+          <Link
+            aria-disabled={isSubmitting}
+            className={`app-btn app-btn-secondary ${isSubmitting ? 'pointer-events-none opacity-60' : ''}`}
+            to="/login"
+          >
             Back to login
           </Link>
         </div>

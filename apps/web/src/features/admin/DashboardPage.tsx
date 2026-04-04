@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { AlertTriangleIcon, FolderStackIcon, ReceiptIcon, WalletIcon } from '../../components/icons';
 import { MetricCard, Surface } from '../../components/layout';
-import { apiRequest, formatCurrency, formatDate, type DashboardMetrics, type Invoice, type Subscription } from '../../lib/api';
+import { apiRequest, formatCurrency, formatDate, type DashboardMetrics, type Invoice, type PaginatedResponse, type Subscription } from '../../lib/api';
 import { useSession } from '../../lib/session';
 
 export function DashboardPage() {
@@ -16,17 +16,18 @@ export function DashboardPage() {
 
   const subscriptionsQuery = useQuery({
     queryKey: ['admin-dashboard-subscriptions'],
-    queryFn: () => apiRequest<Subscription[]>('/subscriptions', { token })
+    queryFn: () =>
+      apiRequest<PaginatedResponse<Subscription>>('/subscriptions?page=1&pageSize=5', { token })
   });
 
   const invoicesQuery = useQuery({
     queryKey: ['admin-dashboard-invoices'],
-    queryFn: () => apiRequest<Invoice[]>('/invoices', { token })
+    queryFn: () => apiRequest<PaginatedResponse<Invoice>>('/invoices?page=1&pageSize=5', { token })
   });
 
   const metrics = metricsQuery.data;
-  const recentSubscriptions = subscriptionsQuery.data?.slice(0, 5) ?? [];
-  const recentInvoices = invoicesQuery.data?.slice(0, 5) ?? [];
+  const recentSubscriptions = subscriptionsQuery.data?.items ?? [];
+  const recentInvoices = invoicesQuery.data?.items ?? [];
 
   return (
     <>

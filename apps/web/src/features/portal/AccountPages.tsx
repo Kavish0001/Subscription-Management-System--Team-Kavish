@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { CalendarRepeatIcon, CreditCardIcon, PrinterIcon, ReceiptIcon } from '../../components/icons';
 import { StatusBadge, Surface } from '../../components/layout';
 import { ApiError } from '../../lib/api';
-import { apiRequest, formatCurrency, formatDate, type Contact, type Invoice, type Subscription } from '../../lib/api';
+import { apiRequest, formatCurrency, formatDate, type Contact, type Invoice, type PaginatedResponse, type Subscription } from '../../lib/api';
 import { useSession } from '../../lib/session';
 
 const fieldClass = 'rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3';
+const ORDERS_PAGE_SIZE = 12;
 
 export function ProfilePage() {
   const queryClient = useQueryClient();
@@ -31,10 +32,11 @@ export function ProfilePage() {
   });
   const ordersQuery = useQuery({
     queryKey: ['profile-orders'],
-    queryFn: () => apiRequest<Subscription[]>('/subscriptions', { token })
+    queryFn: () =>
+      apiRequest<PaginatedResponse<Subscription>>('/subscriptions?page=1&pageSize=3', { token })
   });
 
-  const latestSubscriptions = ordersQuery.data?.slice(0, 3) ?? [];
+  const latestSubscriptions = ordersQuery.data?.items ?? [];
   const defaultAddress = contactQuery.data?.addresses.find((address) => address.isDefault) ?? contactQuery.data?.addresses[0];
 
   useEffect(() => {
@@ -153,13 +155,24 @@ export function ProfilePage() {
 
 export function OrdersPage() {
   const { token } = useSession();
+  const [page, setPage] = useState(1);
   const subscriptionsQuery = useQuery({
-    queryKey: ['portal-orders'],
-    queryFn: () => apiRequest<Subscription[]>('/subscriptions', { token })
+    queryKey: ['portal-orders', page],
+    queryFn: () =>
+      apiRequest<PaginatedResponse<Subscription>>(`/subscriptions?page=${page}&pageSize=${ORDERS_PAGE_SIZE}`, { token })
   });
+  const orders = subscriptionsQuery.data?.items ?? [];
+  const totalOrders = subscriptionsQuery.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalOrders / ORDERS_PAGE_SIZE));
 
   return (
     <Surface title="My Orders">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
+        <p>
+          Showing {orders.length ? (page - 1) * ORDERS_PAGE_SIZE + 1 : 0}-{Math.min(page * ORDERS_PAGE_SIZE, totalOrders)} of {totalOrders} orders
+        </p>
+        <PaginationControls currentPage={page} onPageChange={setPage} totalPages={totalPages} />
+      </div>
       <div className="overflow-x-auto overflow-y-hidden rounded-3xl border border-white/10">
         <table className="min-w-[820px] w-full text-left text-sm">
           <thead className="bg-white/6 text-slate-300">
@@ -168,11 +181,11 @@ export function OrdersPage() {
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Download</th>
+              <th className="px-4 py-3">Print</th>
             </tr>
           </thead>
           <tbody>
-            {subscriptionsQuery.data?.map((subscription) => (
+            {orders.map((subscription) => (
               <tr className="border-t border-white/10 text-slate-100" key={subscription.id}>
                 <td className="px-4 py-3">
                   <Link className="text-amber-300" to={`/account/orders/${subscription.id}`}>
@@ -183,12 +196,19 @@ export function OrdersPage() {
                 <td className="px-4 py-3">{formatCurrency(subscription.totalAmount)}</td>
                 <td className="px-4 py-3">{subscription.status}</td>
                 <td className="px-4 py-3">
-                  <button className="text-amber-300" onClick={() => window.print()} type="button">
-                    Download
-                  </button>
+                  <Link className="text-amber-300" to={`/account/orders/${subscription.id}?print=1`}>
+                    Print
+                  </Link>
                 </td>
               </tr>
             ))}
+            {orders.length === 0 ? (
+              <tr className="border-t border-white/10 text-slate-400">
+                <td className="px-4 py-6" colSpan={5}>
+                  No orders found.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -395,9 +415,11 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { token } = useSession();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasAutoPrinted = useRef(false);
   const subscriptionQuery = useQuery({
     queryKey: ['portal-order', id],
     queryFn: () => apiRequest<Subscription>(`/subscriptions/${id}`, { token }),
@@ -449,6 +471,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
   const canRenew = mode === 'detail' && ['confirmed', 'active', 'closed'].includes(subscription?.status ?? '');
   const canUpsell = mode === 'detail' && ['confirmed', 'active', 'closed'].includes(subscription?.status ?? '');
   const canClose = mode === 'detail' && ['confirmed', 'active'].includes(subscription?.status ?? '');
+  const shouldPrint = mode === 'detail' && searchParams.get('print') === '1';
   const historyItems = useMemo(
     () =>
       (subscription?.childOrders ?? []).map((child) => ({
@@ -457,6 +480,21 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
       })),
     [subscription?.childOrders]
   );
+
+  useEffect(() => {
+    if (!subscription || !shouldPrint || hasAutoPrinted.current) {
+      return;
+    }
+
+    hasAutoPrinted.current = true;
+    const timer = window.setTimeout(() => {
+      window.print();
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [shouldPrint, subscription]);
 
   if (!subscription) {
     return (
@@ -639,5 +677,43 @@ function EditableField({ children, label }: { children: React.ReactNode; label: 
       {label}
       {children}
     </label>
+  );
+}
+
+function PaginationControls({
+  currentPage,
+  onPageChange,
+  totalPages
+}: Readonly<{
+  currentPage: number;
+  onPageChange: (page: number) => void;
+  totalPages: number;
+}>) {
+  if (totalPages <= 1) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        className="rounded-full border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={currentPage <= 1}
+        onClick={() => onPageChange(currentPage - 1)}
+        type="button"
+      >
+        Previous
+      </button>
+      <span className="min-w-[104px] text-center text-sm text-slate-300">
+        Page {currentPage} / {totalPages}
+      </span>
+      <button
+        className="rounded-full border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={currentPage >= totalPages}
+        onClick={() => onPageChange(currentPage + 1)}
+        type="button"
+      >
+        Next
+      </button>
+    </div>
   );
 }

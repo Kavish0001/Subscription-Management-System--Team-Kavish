@@ -234,25 +234,37 @@ export async function apiRequest<T>(
   init: RequestInit & { token?: string | null } = {},
 ) {
   const { token, headers, body, ...rest } = init;
-  const response = await fetch(`${API_URL}${path}`, {
-    ...rest,
-    body,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers
-    }
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...rest,
+      body,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers
+      }
+    });
+  } catch {
+    throw new ApiError('API server is unavailable. Start the backend and try again.', 503);
+  }
 
   if (response.status === 204) {
     return undefined as T;
   }
 
-  const payload = (await response.json()) as ApiEnvelope<T> | ApiErrorEnvelope;
+  let payload: ApiEnvelope<T> | ApiErrorEnvelope | null = null;
+
+  try {
+    payload = (await response.json()) as ApiEnvelope<T> | ApiErrorEnvelope;
+  } catch {
+    payload = null;
+  }
 
   if (!response.ok) {
-    const errorMessage = 'error' in payload ? payload.error?.message : undefined;
+    const errorMessage = payload && 'error' in payload ? payload.error?.message : undefined;
     throw new ApiError(errorMessage ?? 'Request failed', response.status);
   }
 

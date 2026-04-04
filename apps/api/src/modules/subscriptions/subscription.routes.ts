@@ -1,5 +1,5 @@
 import { Prisma, SubscriptionStatus } from '@prisma/client';
-import { createSubscriptionSchema } from '@subscription/shared';
+import { createSubscriptionSchema, paginationSchema } from '@subscription/shared';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -11,6 +11,30 @@ import { requireAuth, requireRole, type AuthContext, type AuthenticatedRequest }
 export const subscriptionsRouter = Router();
 
 subscriptionsRouter.use(requireAuth);
+
+const subscriptionListInclude = {
+  customerContact: {
+    select: {
+      id: true,
+      userId: true,
+      name: true,
+      companyName: true
+    }
+  },
+  recurringPlan: true,
+  invoices: {
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      status: true,
+      invoiceDate: true,
+      dueDate: true,
+      totalAmount: true,
+      amountDue: true
+    }
+  }
+} as const;
 
 const subscriptionInclude = {
   customerContact: {
@@ -242,9 +266,27 @@ subscriptionsRouter.get('/', async (request, response) => {
         }
       : undefined;
 
+  const shouldPaginate = request.query.page !== undefined || request.query.pageSize !== undefined;
+
+  if (shouldPaginate) {
+    const { page, pageSize } = paginationSchema.parse(request.query);
+    const [items, total] = await Promise.all([
+      prisma.subscriptionOrder.findMany({
+        where,
+        include: subscriptionListInclude,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize
+      }),
+      prisma.subscriptionOrder.count({ where })
+    ]);
+
+    return response.json({ data: { items, page, pageSize, total } });
+  }
+
   const subscriptions = await prisma.subscriptionOrder.findMany({
     where,
-    include: subscriptionInclude,
+    include: subscriptionListInclude,
     orderBy: { createdAt: 'desc' }
   });
 

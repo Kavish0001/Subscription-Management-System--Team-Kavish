@@ -1,5 +1,5 @@
 import { InvoiceStatus, PaymentStatus, Prisma, SubscriptionStatus } from '@prisma/client';
-import { createInvoiceSchema, portalCheckoutSchema } from '@subscription/shared';
+import { createInvoiceSchema, paginationSchema, portalCheckoutSchema } from '@subscription/shared';
 import { Router, type Request } from 'express';
 
 import { AppError } from '../../lib/errors.js';
@@ -53,9 +53,27 @@ billingRouter.get('/invoices', async (request, response) => {
         }
       : undefined;
 
+  const shouldPaginate = request.query.page !== undefined || request.query.pageSize !== undefined;
+
+  if (shouldPaginate) {
+    const { page, pageSize } = paginationSchema.parse(request.query);
+    const [items, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where,
+        include: { subscriptionOrder: true },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize
+      }),
+      prisma.invoice.count({ where })
+    ]);
+
+    return response.json({ data: { items, page, pageSize, total } });
+  }
+
   const invoices = await prisma.invoice.findMany({
     where,
-    include: { subscriptionOrder: true, payments: true },
+    include: { subscriptionOrder: true },
     orderBy: { createdAt: 'desc' }
   });
 

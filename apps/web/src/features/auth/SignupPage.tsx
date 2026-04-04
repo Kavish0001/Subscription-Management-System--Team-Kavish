@@ -29,8 +29,8 @@ export function SignupPage() {
   return (
     <AuthShell
       eyebrow="Portal onboarding"
-      title="Create a subscription-ready customer account"
-      description="Start with the portal, then move into quotes, invoices, payments, and active subscriptions without changing systems."
+      title=" subscription-ready"
+      description="Start with the portal."
     >
       <form
         className="grid gap-4"

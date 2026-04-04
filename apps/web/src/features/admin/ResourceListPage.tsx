@@ -3,11 +3,12 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { Surface } from '../../components/layout';
-import { apiRequest, formatCurrency, formatDate, type Discount, type Product, type RecurringPlan, type Subscription } from '../../lib/api';
+import { apiRequest, formatCurrency, formatDate, type Discount, type PaginatedResponse, type Product, type RecurringPlan, type Subscription } from '../../lib/api';
 import { ApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
 
 type ResourceKind = 'subscriptions' | 'products' | 'recurring-plans' | 'discounts';
+const ADMIN_LIST_PAGE_SIZE = 12;
 
 export function ResourceListPage({
   title,
@@ -21,6 +22,7 @@ export function ResourceListPage({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { token } = useSession();
+  const [page, setPage] = useState(1);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [productUploadKey, setProductUploadKey] = useState(0);
@@ -52,11 +54,9 @@ export function ResourceListPage({
   });
 
   const productsQuery = useQuery({
-    queryKey: ['admin-products'],
+    queryKey: ['admin-products', page],
     queryFn: () =>
-      apiRequest<{ items: Product[] }>('/products?page=1&pageSize=50', { token }).then(
-        (result) => result.items
-      ),
+      apiRequest<PaginatedResponse<Product>>(`/products?page=${page}&pageSize=${ADMIN_LIST_PAGE_SIZE}`, { token }),
     enabled: resource === 'products'
   });
 
@@ -73,26 +73,40 @@ export function ResourceListPage({
   });
 
   const subscriptionsQuery = useQuery({
-    queryKey: ['admin-subscriptions'],
-    queryFn: () => apiRequest<Subscription[]>('/subscriptions', { token }),
+    queryKey: ['admin-subscriptions', page],
+    queryFn: () =>
+      apiRequest<PaginatedResponse<Subscription>>(`/subscriptions?page=${page}&pageSize=${ADMIN_LIST_PAGE_SIZE}`, { token }),
     enabled: resource === 'subscriptions'
   });
 
+  const allPlanRows = plansQuery.data ?? [];
+  const allDiscountRows = discountsQuery.data ?? [];
   const rows = useMemo(() => {
     if (resource === 'products') {
-      return productsQuery.data ?? [];
+      return productsQuery.data?.items ?? [];
     }
 
     if (resource === 'recurring-plans') {
-      return plansQuery.data ?? [];
+      const start = (page - 1) * ADMIN_LIST_PAGE_SIZE;
+      return allPlanRows.slice(start, start + ADMIN_LIST_PAGE_SIZE);
     }
 
     if (resource === 'discounts') {
-      return discountsQuery.data ?? [];
+      const start = (page - 1) * ADMIN_LIST_PAGE_SIZE;
+      return allDiscountRows.slice(start, start + ADMIN_LIST_PAGE_SIZE);
     }
 
-    return subscriptionsQuery.data ?? [];
-  }, [discountsQuery.data, plansQuery.data, productsQuery.data, resource, subscriptionsQuery.data]);
+    return subscriptionsQuery.data?.items ?? [];
+  }, [allDiscountRows, allPlanRows, page, productsQuery.data?.items, resource, subscriptionsQuery.data?.items]);
+  const totalRows =
+    resource === 'products'
+      ? (productsQuery.data?.total ?? 0)
+      : resource === 'subscriptions'
+        ? (subscriptionsQuery.data?.total ?? 0)
+        : resource === 'recurring-plans'
+          ? allPlanRows.length
+          : allDiscountRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / ADMIN_LIST_PAGE_SIZE));
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -355,6 +369,12 @@ export function ResourceListPage({
     >
       <p className="mb-4 text-slate-300">{description}</p>
       {error ? <p className="mb-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
+        <p>
+          Showing {rows.length ? (page - 1) * ADMIN_LIST_PAGE_SIZE + 1 : 0}-{Math.min(page * ADMIN_LIST_PAGE_SIZE, totalRows)} of {totalRows} records
+        </p>
+        <PaginationControls currentPage={page} onPageChange={setPage} totalPages={totalPages} />
+      </div>
       {isCreating && resource !== 'subscriptions' ? (
         <div className="mb-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
           {resource === 'products' ? (
@@ -698,6 +718,44 @@ export function ResourceListPage({
         </table>
       </div>
     </Surface>
+  );
+}
+
+function PaginationControls({
+  currentPage,
+  onPageChange,
+  totalPages
+}: Readonly<{
+  currentPage: number;
+  onPageChange: (page: number) => void;
+  totalPages: number;
+}>) {
+  if (totalPages <= 1) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        className="rounded-full border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={currentPage <= 1}
+        onClick={() => onPageChange(currentPage - 1)}
+        type="button"
+      >
+        Previous
+      </button>
+      <span className="min-w-[104px] text-center text-sm text-slate-300">
+        Page {currentPage} / {totalPages}
+      </span>
+      <button
+        className="rounded-full border border-white/10 bg-white/6 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={currentPage >= totalPages}
+        onClick={() => onPageChange(currentPage + 1)}
+        type="button"
+      >
+        Next
+      </button>
+    </div>
   );
 }
 
