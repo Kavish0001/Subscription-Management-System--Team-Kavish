@@ -192,7 +192,7 @@ export async function login(input: unknown) {
   }
 
   if (!user.isActive) {
-    throw new AppError('Account is inactive', 403, 'ACCOUNT_INACTIVE');
+    throw new AppError('Account banned by admin', 403, 'ACCOUNT_INACTIVE');
   }
 
   if (!(user as any).emailVerifiedAt) {
