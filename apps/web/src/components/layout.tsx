@@ -1,7 +1,7 @@
-import type { ComponentType, PropsWithChildren, ReactNode } from 'react';
+import { useState, type ComponentType, type PropsWithChildren, type ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 
-import { ArrowRightIcon } from './icons';
+import { ArrowRightIcon, MenuIcon, XIcon } from './icons';
 import { cn, formatStatusLabel, getStatusTone, type StatusTone } from '../lib/ui';
 
 type IconComponent = ComponentType<{ className?: string }>;
@@ -20,16 +20,54 @@ export function Shell({
   navigation,
   toolbar,
   children
-}: PropsWithChildren<{
+}: Readonly<PropsWithChildren<{
   title: string;
   subtitle: string;
   navigation: NavigationItem[];
   toolbar?: ReactNode;
-}>) {
+}>>) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Close sidebar on navigation (mobile)
+  const handleNavLinkClick = () => {
+    setIsSidebarOpen(false);
+  };
+
   return (
     <div className="app-shell">
       <div className="min-h-screen lg:pl-[272px]">
-        <aside className="app-sidebar border-b p-0 lg:fixed lg:inset-y-0 lg:left-0 lg:z-20 lg:h-screen lg:w-[272px] lg:overflow-y-auto lg:border-r lg:border-b-0 lg:p-3">
+        {/* Mobile Topbar */}
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-4 backdrop-blur-xl lg:hidden">
+          <Link className="flex items-center gap-2" to="/" onClick={() => setIsSidebarOpen(false)}>
+            <div className="overflow-hidden rounded-lg border border-[color:var(--color-border)] bg-white">
+              <img alt="Logo" className="h-8 w-8 object-contain" src="/veltrix-logo.png" />
+            </div>
+            <span className="text-sm font-bold tracking-tight">VELTRIX</span>
+          </Link>
+          <button
+            aria-label="Toggle navigation"
+            className="grid h-10 w-10 place-items-center rounded-xl bg-[color:var(--color-card)] text-[color:var(--color-text-secondary)] transition-colors hover:bg-[color:var(--color-border)]"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            type="button"
+          >
+            {isSidebarOpen ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
+          </button>
+        </header>
+
+        {/* Sidebar Backdrop */}
+        {isSidebarOpen ? (
+          <div
+            className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        ) : null}
+
+        <aside
+          className={cn(
+            'app-sidebar fixed inset-y-0 left-0 z-50 w-[272px] overflow-y-auto border-r border-[color:var(--color-border)] p-3 transition-transform duration-300 ease-in-out lg:translate-x-0',
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          )}
+        >
           <BrandLockup
             caption="Connected subscription operations"
             sidebar
@@ -45,6 +83,7 @@ export function Shell({
                   key={item.to}
                   end={item.end}
                   to={item.to}
+                  onClick={handleNavLinkClick}
                   className={({ isActive }) =>
                     cn(
                       'group rounded-[20px] border px-4 py-3 transition-all duration-150',

@@ -2,7 +2,7 @@ import type { SVGProps } from 'react';
 
 type IconProps = SVGProps<SVGSVGElement>;
 
-function IconBase({ children, className, ...props }: IconProps) {
+function IconBase({ children, className, ...props }: Readonly<IconProps>) {
   return (
     <svg
       aria-hidden="true"
@@ -20,7 +20,7 @@ function IconBase({ children, className, ...props }: IconProps) {
   );
 }
 
-export function BrandMark(props: IconProps) {
+export function BrandMark(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <rect x="3.5" y="4" width="7" height="7" rx="2" />
@@ -34,7 +34,7 @@ export function BrandMark(props: IconProps) {
   );
 }
 
-export function GridIcon(props: IconProps) {
+export function GridIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <rect x="4" y="4" width="7" height="7" rx="2" />
@@ -45,7 +45,7 @@ export function GridIcon(props: IconProps) {
   );
 }
 
-export function CubeIcon(props: IconProps) {
+export function CubeIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="m12 3 7 4v10l-7 4-7-4V7l7-4Z" />
@@ -55,7 +55,7 @@ export function CubeIcon(props: IconProps) {
   );
 }
 
-export function CalendarRepeatIcon(props: IconProps) {
+export function CalendarRepeatIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <rect x="3" y="5" width="18" height="16" rx="3" />
@@ -68,7 +68,7 @@ export function CalendarRepeatIcon(props: IconProps) {
   );
 }
 
-export function RefreshCycleIcon(props: IconProps) {
+export function RefreshCycleIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M4 12a8 8 0 0 1 13.5-5.7L20 8.5" />
@@ -79,7 +79,7 @@ export function RefreshCycleIcon(props: IconProps) {
   );
 }
 
-export function DocumentPenIcon(props: IconProps) {
+export function DocumentPenIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M8 3.5h6l5 5V20a1 1 0 0 1-1 1H8a3 3 0 0 1-3-3V6.5a3 3 0 0 1 3-3Z" />
@@ -89,7 +89,7 @@ export function DocumentPenIcon(props: IconProps) {
   );
 }
 
-export function ReceiptIcon(props: IconProps) {
+export function ReceiptIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M7 3h10v18l-3-2-2 2-2-2-3 2V3Z" />
@@ -100,7 +100,7 @@ export function ReceiptIcon(props: IconProps) {
   );
 }
 
-export function CreditCardIcon(props: IconProps) {
+export function CreditCardIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <rect x="3" y="5" width="18" height="14" rx="3" />
@@ -111,7 +111,7 @@ export function CreditCardIcon(props: IconProps) {
   );
 }
 
-export function TagPercentIcon(props: IconProps) {
+export function TagPercentIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M12 3H6a2 2 0 0 0-2 2v6l9.5 9.5a2.1 2.1 0 0 0 3 0l4-4a2.1 2.1 0 0 0 0-3L11 4a2 2 0 0 0-1-.7Z" />
@@ -123,7 +123,7 @@ export function TagPercentIcon(props: IconProps) {
   );
 }
 
-export function PercentIcon(props: IconProps) {
+export function PercentIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="m19 5-14 14" />
@@ -133,7 +133,7 @@ export function PercentIcon(props: IconProps) {
   );
 }
 
-export function UsersIcon(props: IconProps) {
+export function UsersIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M16 19a4 4 0 0 0-8 0" />
@@ -146,7 +146,7 @@ export function UsersIcon(props: IconProps) {
   );
 }
 
-export function BarChartIcon(props: IconProps) {
+export function BarChartIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M4 20V10" />
@@ -157,7 +157,7 @@ export function BarChartIcon(props: IconProps) {
   );
 }
 
-export function HomeIcon(props: IconProps) {
+export function HomeIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="m4 11 8-7 8 7" />
@@ -167,7 +167,7 @@ export function HomeIcon(props: IconProps) {
   );
 }
 
-export function ShoppingBagIcon(props: IconProps) {
+export function ShoppingBagIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M5 8h14l-1 12H6L5 8Z" />
@@ -176,7 +176,7 @@ export function ShoppingBagIcon(props: IconProps) {
   );
 }
 
-export function SearchIcon(props: IconProps) {
+export function SearchIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <circle cx="11" cy="11" r="6" />
@@ -185,7 +185,7 @@ export function SearchIcon(props: IconProps) {
   );
 }
 
-export function ArrowRightIcon(props: IconProps) {
+export function ArrowRightIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M5 12h14" />
@@ -194,7 +194,7 @@ export function ArrowRightIcon(props: IconProps) {
   );
 }
 
-export function ChevronDownIcon(props: IconProps) {
+export function ChevronDownIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="m6 9 6 6 6-6" />
@@ -202,7 +202,7 @@ export function ChevronDownIcon(props: IconProps) {
   );
 }
 
-export function LogOutIcon(props: IconProps) {
+export function LogOutIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M10 17v2a2 2 0 0 0 2 2h6" />
@@ -213,7 +213,7 @@ export function LogOutIcon(props: IconProps) {
   );
 }
 
-export function WalletIcon(props: IconProps) {
+export function WalletIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19a1 1 0 0 1 1 1v3H6.5A2.5 2.5 0 0 0 4 11.5v5A2.5 2.5 0 0 0 6.5 19H20v-3" />
@@ -223,7 +223,7 @@ export function WalletIcon(props: IconProps) {
   );
 }
 
-export function AlertTriangleIcon(props: IconProps) {
+export function AlertTriangleIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M12 4 3.7 18.2A1.3 1.3 0 0 0 4.8 20h14.4a1.3 1.3 0 0 0 1.1-1.8L12 4Z" />
@@ -233,7 +233,7 @@ export function AlertTriangleIcon(props: IconProps) {
   );
 }
 
-export function FolderStackIcon(props: IconProps) {
+export function FolderStackIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M4 7.5h5l1.5 2H20v8.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7.5Z" />
@@ -242,7 +242,7 @@ export function FolderStackIcon(props: IconProps) {
   );
 }
 
-export function PrinterIcon(props: IconProps) {
+export function PrinterIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M7 8V4h10v4" />
@@ -253,7 +253,7 @@ export function PrinterIcon(props: IconProps) {
   );
 }
 
-export function MoonIcon(props: IconProps) {
+export function MoonIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a8.5 8.5 0 1 0 9.5 9.5Z" />
@@ -261,7 +261,7 @@ export function MoonIcon(props: IconProps) {
   );
 }
 
-export function SunIcon(props: IconProps) {
+export function SunIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>
       <circle cx="12" cy="12" r="4" />
@@ -273,6 +273,25 @@ export function SunIcon(props: IconProps) {
       <path d="M19.5 12H22" />
       <path d="m4.9 19.1 1.8-1.8" />
       <path d="m17.3 6.7 1.8-1.8" />
+    </IconBase>
+  );
+}
+
+export function MenuIcon(props: Readonly<IconProps>) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 12h16" />
+      <path d="M4 6h16" />
+      <path d="M4 18h16" />
+    </IconBase>
+  );
+}
+
+export function XIcon(props: Readonly<IconProps>) {
+  return (
+    <IconBase {...props}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </IconBase>
   );
 }
