@@ -3,7 +3,6 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import pinoHttp from 'pino-http';
 
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
@@ -22,11 +21,10 @@ export function createApp() {
   app.use(helmet());
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
-  app.use(
-    pinoHttp({
-      logger
-    }),
-  );
+  app.use((request, _response, next) => {
+    logger.info({ method: request.method, url: request.url }, 'incoming request');
+    next();
+  });
   app.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,

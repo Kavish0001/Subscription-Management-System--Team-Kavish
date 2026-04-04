@@ -60,7 +60,10 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
       ? await prisma.recurringPlan.findUnique({ where: { id: payload.recurringPlanId } })
       : null;
 
-    const subtotal = payload.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+    const subtotal = payload.lines.reduce(
+      (sum: number, line: (typeof payload.lines)[number]) => sum + line.quantity * line.unitPrice,
+      0,
+    );
     const tax = subtotal * 0.18;
     const total = subtotal + tax;
     const now = new Date();
@@ -89,7 +92,7 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
         totalAmount: new Prisma.Decimal(total),
         notes: payload.notes,
         lines: {
-          create: payload.lines.map((line, index) => ({
+          create: payload.lines.map((line: (typeof payload.lines)[number], index: number) => ({
             productId: line.productId,
             variantId: line.variantId,
             productNameSnapshot: `Line ${index + 1}`,
@@ -111,8 +114,9 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
 });
 
 subscriptionsRouter.post('/:id/send-quotation', requireRole('admin', 'internal_user'), async (request, response) => {
+  const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
   const subscription = await prisma.subscriptionOrder.update({
-    where: { id: request.params.id },
+    where: { id },
     data: {
       status: SubscriptionStatus.quotation_sent,
       quotationDate: new Date()
@@ -123,8 +127,9 @@ subscriptionsRouter.post('/:id/send-quotation', requireRole('admin', 'internal_u
 });
 
 subscriptionsRouter.post('/:id/confirm', requireRole('admin', 'internal_user'), async (request, response) => {
+  const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
   const subscription = await prisma.subscriptionOrder.update({
-    where: { id: request.params.id },
+    where: { id },
     data: {
       status: SubscriptionStatus.confirmed,
       confirmedAt: new Date()

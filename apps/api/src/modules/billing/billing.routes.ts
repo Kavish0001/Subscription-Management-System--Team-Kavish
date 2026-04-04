@@ -72,8 +72,9 @@ billingRouter.post('/invoices', requireRole('admin', 'internal_user'), async (re
 });
 
 billingRouter.post('/invoices/:id/confirm', requireRole('admin', 'internal_user'), async (request, response) => {
+  const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
   const invoice = await prisma.invoice.update({
-    where: { id: request.params.id },
+    where: { id },
     data: { status: InvoiceStatus.confirmed }
   });
 
@@ -81,8 +82,9 @@ billingRouter.post('/invoices/:id/confirm', requireRole('admin', 'internal_user'
 });
 
 billingRouter.post('/invoices/:id/cancel', requireRole('admin', 'internal_user'), async (request, response) => {
+  const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
   const invoice = await prisma.invoice.update({
-    where: { id: request.params.id },
+    where: { id },
     data: {
       status: InvoiceStatus.cancelled,
       cancelledAt: new Date()
@@ -93,8 +95,9 @@ billingRouter.post('/invoices/:id/cancel', requireRole('admin', 'internal_user')
 });
 
 billingRouter.post('/invoices/:id/restore-draft', requireRole('admin', 'internal_user'), async (request, response) => {
+  const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
   const invoice = await prisma.invoice.update({
-    where: { id: request.params.id },
+    where: { id },
     data: {
       status: InvoiceStatus.draft,
       cancelledAt: null

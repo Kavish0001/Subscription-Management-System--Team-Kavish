@@ -91,6 +91,7 @@ model User {
   refreshTokens          RefreshToken[]
   managedSubscriptions   SubscriptionOrder[] @relation("SalespersonSubscriptions")
   createdDiscountRules   DiscountRule[]
+  notifications          Notification[]
   auditLogs              AuditLog[]
 
   @@index([role, isActive])

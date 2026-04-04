@@ -1,5 +1,5 @@
 import argon2 from 'argon2';
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 
 import { type SessionUser, loginSchema, signupSchema } from '@subscription/shared';
 import { UserRole } from '@prisma/client';
@@ -9,17 +9,21 @@ import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 
 function issueAccessToken(user: SessionUser) {
-  return jwt.sign({ email: user.email, role: user.role }, env.JWT_ACCESS_SECRET, {
+  const options: SignOptions = {
     subject: user.id,
-    expiresIn: env.ACCESS_TOKEN_TTL
-  });
+    expiresIn: env.ACCESS_TOKEN_TTL as SignOptions['expiresIn']
+  };
+
+  return jwt.sign({ email: user.email, role: user.role }, env.JWT_ACCESS_SECRET, options);
 }
 
 function issueRefreshToken(user: SessionUser) {
-  return jwt.sign({ email: user.email, role: user.role }, env.JWT_REFRESH_SECRET, {
+  const options: SignOptions = {
     subject: user.id,
-    expiresIn: env.REFRESH_TOKEN_TTL
-  });
+    expiresIn: env.REFRESH_TOKEN_TTL as SignOptions['expiresIn']
+  };
+
+  return jwt.sign({ email: user.email, role: user.role }, env.JWT_REFRESH_SECRET, options);
 }
 
 export async function signup(input: unknown) {

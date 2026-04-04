@@ -6,7 +6,7 @@ import {
   intervalUnits,
   productTypes,
   userRoles,
-} from './enums';
+} from './enums.js';
 
 export const paginationSchema = z.object({
   page: z.coerce.number().min(1).default(1),

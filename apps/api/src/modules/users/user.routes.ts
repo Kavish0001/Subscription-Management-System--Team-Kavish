@@ -2,7 +2,6 @@ import { Router } from 'express';
 import argon2 from 'argon2';
 
 import { createInternalUserSchema } from '@subscription/shared';
-import { UserRole } from '@prisma/client';
 
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
@@ -30,10 +29,6 @@ usersRouter.get('/', requireRole('admin'), async (_request, response) => {
 usersRouter.post('/', requireRole('admin'), async (request, response, next) => {
   try {
     const payload = createInternalUserSchema.parse(request.body);
-
-    if (payload.role === UserRole.portal_user) {
-      throw new AppError('Portal users must use signup flow', 400);
-    }
 
     const existingUser = await prisma.user.findUnique({
       where: { email: payload.email.toLowerCase() }

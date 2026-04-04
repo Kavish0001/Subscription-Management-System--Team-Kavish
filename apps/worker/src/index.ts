@@ -1,11 +1,11 @@
 import 'dotenv/config';
 
 import { Worker } from 'bullmq';
-import IORedis from 'ioredis';
+import { Redis } from 'ioredis';
 import pino from 'pino';
 
 const logger = pino();
-const redisConnection = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+const redisConnection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
   maxRetriesPerRequest: null
 });
 
