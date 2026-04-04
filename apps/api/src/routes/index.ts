@@ -6,6 +6,7 @@ import { catalogRouter } from '../modules/catalog/catalog.routes.js';
 import { contactsRouter } from '../modules/contacts/contact.routes.js';
 import { reportsRouter } from '../modules/reports/report.routes.js';
 import { subscriptionsRouter } from '../modules/subscriptions/subscription.routes.js';
+import { taxesRouter } from '../modules/taxes/tax.routes.js';
 import { usersRouter } from '../modules/users/user.routes.js';
 
 export const apiRouter = Router();
@@ -26,4 +27,5 @@ apiRouter.use('/contacts', contactsRouter);
 apiRouter.use('/', catalogRouter);
 apiRouter.use('/subscriptions', subscriptionsRouter);
 apiRouter.use('/', billingRouter);
+apiRouter.use('/', taxesRouter);
 apiRouter.use('/reports', reportsRouter);

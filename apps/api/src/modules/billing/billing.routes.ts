@@ -1,11 +1,11 @@
 import { InvoiceStatus, PaymentStatus, Prisma, SubscriptionStatus } from '@prisma/client';
-import { createInvoiceSchema } from '@subscription/shared';
+import { createInvoiceSchema, portalCheckoutSchema } from '@subscription/shared';
 import { Router, type Request } from 'express';
-
 
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middleware/auth.js';
+import { buildSubscriptionPricing } from '../subscriptions/pricing.js';
 
 export const billingRouter = Router();
 type InvoiceIdParams = { id: string };
@@ -19,6 +19,27 @@ function assertInvoiceAccess(
   if (auth?.role === 'portal_user' && ownerUserId !== auth.userId) {
     throw new AppError('You do not have permission to access this invoice', 403);
   }
+}
+
+function nextInvoiceDateFromPlan(date: Date, unit?: string | null, count = 1) {
+  const next = new Date(date);
+
+  switch (unit) {
+    case 'day':
+      next.setDate(next.getDate() + count);
+      break;
+    case 'week':
+      next.setDate(next.getDate() + 7 * count);
+      break;
+    case 'month':
+      next.setMonth(next.getMonth() + count);
+      break;
+    case 'year':
+      next.setFullYear(next.getFullYear() + count);
+      break;
+  }
+
+  return next;
 }
 
 billingRouter.get('/invoices', async (request, response) => {
@@ -70,6 +91,183 @@ billingRouter.get('/invoices/:id', async (request: Request<InvoiceIdParams>, res
   }
 });
 
+billingRouter.post('/checkout/complete', requireRole('portal_user'), async (request, response, next) => {
+  try {
+    const auth = (request as AuthenticatedRequest).auth;
+    if (!auth) {
+      throw new AppError('Authentication required', 401);
+    }
+
+    const payload = portalCheckoutSchema.parse(request.body);
+    const contact = await prisma.contact.findFirst({
+      where: {
+        userId: auth.userId,
+        isActive: true
+      },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }]
+    });
+
+    if (!contact) {
+      throw new AppError('Contact not found', 404, 'CONTACT_NOT_FOUND');
+    }
+
+    const groupedLines = new Map<string, typeof payload.lines>();
+    for (const line of payload.lines) {
+      const key = line.recurringPlanId ?? 'no-plan';
+      groupedLines.set(key, [...(groupedLines.get(key) ?? []), line]);
+    }
+
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const subscriptionIds: string[] = [];
+        const invoiceIds: string[] = [];
+
+        for (const [planKey, lines] of groupedLines.entries()) {
+          const recurringPlan =
+            planKey === 'no-plan'
+              ? null
+              : await tx.recurringPlan.findUnique({
+                  where: { id: planKey }
+                });
+
+          if (planKey !== 'no-plan' && !recurringPlan) {
+            throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+          }
+
+          const now = new Date();
+          const pricing = await buildSubscriptionPricing(tx, {
+            recurringPlanId: recurringPlan?.id ?? null,
+            discountCode: payload.discountCode,
+            lines: lines.map((line) => ({
+              productId: line.productId,
+              variantId: line.variantId,
+              quantity: line.quantity
+            }))
+          });
+
+          const subscription = await tx.subscriptionOrder.create({
+            data: {
+              subscriptionNumber: `SUB-${Date.now()}-${subscriptionIds.length + 1}`,
+              customerContactId: contact.id,
+              salespersonUserId: auth.userId,
+              recurringPlanId: recurringPlan?.id,
+              sourceChannel: 'portal',
+              status: SubscriptionStatus.confirmed,
+              quotationDate: now,
+              confirmedAt: now,
+              startDate: now,
+              nextInvoiceDate: nextInvoiceDateFromPlan(
+                now,
+                recurringPlan?.intervalUnit,
+                recurringPlan?.intervalCount ?? 1,
+              ),
+              paymentTermLabel: 'Immediate payment',
+              subtotalAmount: pricing.subtotalAmount,
+              discountAmount: pricing.discountAmount,
+              taxAmount: pricing.taxAmount,
+              totalAmount: pricing.totalAmount,
+              notes: payload.notes,
+              lines: {
+                create: pricing.lines
+              }
+            },
+            include: {
+              lines: true
+            }
+          });
+
+          const invoice = await tx.invoice.create({
+            data: {
+              invoiceNumber: `INV-${Date.now()}-${invoiceIds.length + 1}`,
+              subscriptionOrderId: subscription.id,
+              customerContactId: contact.id,
+              status: InvoiceStatus.confirmed,
+              invoiceDate: now,
+              dueDate: now,
+              sourceLabel: 'Portal checkout',
+              paymentTermLabel: subscription.paymentTermLabel,
+              currencyCode: subscription.currencyCode,
+              subtotalAmount: subscription.subtotalAmount,
+              discountAmount: subscription.discountAmount,
+              taxAmount: subscription.taxAmount,
+              totalAmount: subscription.totalAmount,
+              amountDue: subscription.totalAmount,
+              lines: {
+                create: subscription.lines.map((line) => ({
+                  subscriptionOrderLineId: line.id,
+                  productNameSnapshot: line.productNameSnapshot,
+                  quantity: line.quantity,
+                  unitPrice: line.unitPrice,
+                  discountAmount: line.discountAmount,
+                  taxAmount: line.taxAmount,
+                  lineTotal: line.lineTotal,
+                  sortOrder: line.sortOrder
+                }))
+              }
+            }
+          });
+
+          await tx.payment.create({
+            data: {
+              invoiceId: invoice.id,
+              paymentReference: `PAY-${Date.now()}-${invoiceIds.length + 1}`,
+              paymentMethod: payload.paymentMethod,
+              provider: 'mock_gateway',
+              status: PaymentStatus.succeeded,
+              amount: subscription.totalAmount,
+              currencyCode: subscription.currencyCode,
+              paidAt: now
+            }
+          });
+
+          await tx.invoice.update({
+            where: { id: invoice.id },
+            data: {
+              status: InvoiceStatus.paid,
+              paidAmount: subscription.totalAmount,
+              amountDue: new Prisma.Decimal(0),
+              paidAt: now
+            }
+          });
+
+          await tx.subscriptionOrder.update({
+            where: { id: subscription.id },
+            data: {
+              status: SubscriptionStatus.active
+            }
+          });
+
+          if (pricing.appliedDiscountRuleId) {
+            await tx.discountRule.update({
+              where: { id: pricing.appliedDiscountRuleId },
+              data: {
+                usageCount: {
+                  increment: 1
+                }
+              }
+            });
+          }
+
+          subscriptionIds.push(subscription.id);
+          invoiceIds.push(invoice.id);
+        }
+
+        return {
+          subscriptionIds,
+          invoiceIds
+        };
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+      },
+    );
+
+    response.status(201).json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
 billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_user'), async (request, response, next) => {
   try {
     const auth = (request as AuthenticatedRequest).auth;
@@ -79,7 +277,8 @@ billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_us
       where: { id: payload.subscriptionOrderId },
       include: {
         lines: true,
-        customerContact: true
+        customerContact: true,
+        recurringPlan: true
       }
     });
 
@@ -101,7 +300,7 @@ billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_us
       where: {
         subscriptionOrderId: subscription.id,
         status: {
-          in: [InvoiceStatus.draft, InvoiceStatus.confirmed, InvoiceStatus.paid]
+          in: [InvoiceStatus.draft, InvoiceStatus.confirmed]
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -111,13 +310,20 @@ billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_us
       return response.json({ data: existingInvoice });
     }
 
+    const invoiceDate =
+      subscription.status === SubscriptionStatus.active &&
+      subscription.nextInvoiceDate &&
+      subscription.nextInvoiceDate <= new Date()
+        ? subscription.nextInvoiceDate
+        : new Date();
+
     const invoice = await prisma.invoice.create({
       data: {
         invoiceNumber: `INV-${Date.now()}`,
         subscriptionOrderId: subscription.id,
         customerContactId: subscription.customerContactId,
         status: InvoiceStatus.draft,
-        invoiceDate: new Date(),
+        invoiceDate,
         dueDate: payload.dueDate,
         sourceLabel: payload.sourceLabel,
         paymentTermLabel: subscription.paymentTermLabel,
@@ -143,6 +349,23 @@ billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_us
       include: { lines: true }
     });
 
+    if (
+      subscription.recurringPlan &&
+      subscription.nextInvoiceDate &&
+      subscription.nextInvoiceDate <= invoiceDate
+    ) {
+      await prisma.subscriptionOrder.update({
+        where: { id: subscription.id },
+        data: {
+          nextInvoiceDate: nextInvoiceDateFromPlan(
+            subscription.nextInvoiceDate,
+            subscription.recurringPlan.intervalUnit,
+            subscription.recurringPlan.intervalCount,
+          )
+        }
+      });
+    }
+
     response.status(201).json({ data: invoice });
   } catch (error) {
     next(error);
@@ -155,6 +378,10 @@ billingRouter.post('/invoices/:id/confirm', requireRole('admin', 'internal_user'
     const existing = await prisma.invoice.findUnique({ where: { id } });
     if (!existing) {
       throw new AppError('Invoice not found', 404, 'INVOICE_NOT_FOUND');
+    }
+
+    if (existing.status !== InvoiceStatus.draft) {
+      throw new AppError('Only draft invoices can be confirmed', 409);
     }
 
     const invoice = await prisma.invoice.update({
@@ -174,6 +401,10 @@ billingRouter.post('/invoices/:id/cancel', requireRole('admin', 'internal_user')
     const existing = await prisma.invoice.findUnique({ where: { id } });
     if (!existing) {
       throw new AppError('Invoice not found', 404, 'INVOICE_NOT_FOUND');
+    }
+
+    if (existing.status === InvoiceStatus.paid) {
+      throw new AppError('Paid invoices cannot be cancelled', 409);
     }
 
     const invoice = await prisma.invoice.update({
@@ -196,6 +427,10 @@ billingRouter.post('/invoices/:id/restore-draft', requireRole('admin', 'internal
     const existing = await prisma.invoice.findUnique({ where: { id } });
     if (!existing) {
       throw new AppError('Invoice not found', 404, 'INVOICE_NOT_FOUND');
+    }
+
+    if (existing.status !== InvoiceStatus.cancelled) {
+      throw new AppError('Only cancelled invoices can be restored to draft', 409);
     }
 
     const invoice = await prisma.invoice.update({
@@ -224,7 +459,11 @@ billingRouter.post('/payments/mock', async (request, response, next) => {
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
       include: {
-        subscriptionOrder: true,
+        subscriptionOrder: {
+          include: {
+            recurringPlan: true
+          }
+        },
         customerContact: true
       }
     });
@@ -235,44 +474,59 @@ billingRouter.post('/payments/mock', async (request, response, next) => {
 
     assertInvoiceAccess(auth, invoice.customerContact.userId);
 
-    if (invoice.status === InvoiceStatus.paid) {
-      throw new AppError('Invoice is already paid', 409);
+    if (invoice.status !== InvoiceStatus.confirmed) {
+      throw new AppError('Only confirmed invoices can be paid', 409);
     }
 
-    const payment = await prisma.payment.create({
-      data: {
-        invoiceId,
-        paymentReference: `PAY-${Date.now()}`,
-        paymentMethod,
-        provider: 'mock_gateway',
-        status: PaymentStatus.succeeded,
-        amount: new Prisma.Decimal(invoice.amountDue),
-        paidAt: new Date()
-      }
-    });
+    if (Number(invoice.amountDue) <= 0) {
+      throw new AppError('Invoice does not have an outstanding balance', 409);
+    }
 
-    const updatedInvoice = await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        status: InvoiceStatus.paid,
-        paidAmount: invoice.totalAmount,
-        amountDue: new Prisma.Decimal(0),
-        paidAt: new Date()
-      }
-    });
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const payment = await tx.payment.create({
+          data: {
+            invoiceId,
+            paymentReference: `PAY-${Date.now()}`,
+            paymentMethod,
+            provider: 'mock_gateway',
+            status: PaymentStatus.succeeded,
+            amount: new Prisma.Decimal(invoice.amountDue),
+            currencyCode: invoice.currencyCode,
+            paidAt: new Date()
+          }
+        });
 
-    await prisma.subscriptionOrder.update({
-      where: { id: invoice.subscriptionOrderId },
-      data: {
-        status: SubscriptionStatus.active
-      }
-    });
+        const updatedInvoice = await tx.invoice.update({
+          where: { id: invoiceId },
+          data: {
+            status: InvoiceStatus.paid,
+            paidAmount: invoice.totalAmount,
+            amountDue: new Prisma.Decimal(0),
+            paidAt: new Date()
+          }
+        });
+
+        const updatedSubscription = await tx.subscriptionOrder.update({
+          where: { id: invoice.subscriptionOrderId },
+          data: {
+            status: SubscriptionStatus.active
+          }
+        });
+
+        return {
+          payment,
+          invoice: updatedInvoice,
+          subscription: updatedSubscription
+        };
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+      },
+    );
 
     response.status(201).json({
-      data: {
-        payment,
-        invoice: updatedInvoice
-      }
+      data: result
     });
   } catch (error) {
     next(error);

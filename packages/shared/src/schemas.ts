@@ -29,6 +29,21 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const requestPasswordResetSchema = z.object({
+  email: z.string().email(),
+});
+
+export const confirmPasswordResetSchema = z
+  .object({
+    token: z.string().min(20),
+    password: signupSchema.shape.password,
+    confirmPassword: z.string().min(1),
+  })
+  .refine((input) => input.password === input.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
 export const productSchema = z.object({
   name: z.string().min(2).max(120),
   slug: z.string().min(2).max(140),
@@ -74,6 +89,7 @@ export const createSubscriptionSchema = z.object({
   quotationTemplateId: z.string().uuid().optional(),
   sourceChannel: z.enum(['admin', 'portal']).default('admin'),
   paymentTermLabel: z.string().max(120).optional(),
+  discountCode: z.string().max(50).optional(),
   notes: z.string().max(4000).optional(),
   lines: z
     .array(
@@ -82,6 +98,22 @@ export const createSubscriptionSchema = z.object({
         variantId: z.string().uuid().optional(),
         quantity: z.number().int().min(1),
         unitPrice: z.number().nonnegative(),
+      }),
+    )
+    .min(1),
+});
+
+export const portalCheckoutSchema = z.object({
+  paymentMethod: z.string().min(2).max(60),
+  discountCode: z.string().max(50).optional(),
+  notes: z.string().max(4000).optional(),
+  lines: z
+    .array(
+      z.object({
+        productId: z.string().uuid(),
+        recurringPlanId: z.string().uuid().nullable().optional(),
+        variantId: z.string().uuid().optional(),
+        quantity: z.number().int().min(1),
       }),
     )
     .min(1),

@@ -8,14 +8,7 @@ import {
 } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
-import { apiRequest, normalizeSessionUser, type SessionUser } from './api';
-
-const storageKey = 'subflow-session';
-
-type StoredSession = {
-  token: string;
-  user: SessionUser;
-};
+import { ApiError, apiRequest, normalizeSessionUser, type SessionUser } from './api';
 
 type SessionContextValue = {
   ready: boolean;
@@ -30,50 +23,11 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-function persistSession(value: StoredSession | null) {
-  if (!value) {
-    window.localStorage.removeItem(storageKey);
-    return;
-  }
-
-  window.localStorage.setItem(storageKey, JSON.stringify(value));
-}
-
-function readStoredSession() {
-  const raw = window.localStorage.getItem(storageKey);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(raw) as StoredSession;
-  } catch {
-    window.localStorage.removeItem(storageKey);
-    return null;
-  }
-}
-
 export function SessionProvider({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
 
-  useEffect(() => {
-    const stored = readStoredSession();
-
-    if (!stored) {
-      setReady(true);
-      return;
-    }
-
-    setToken(stored.token);
-    setUser(stored.user);
-    setReady(true);
-  }, []);
-
   const clearSession = async () => {
-    persistSession(null);
-    setToken(null);
     setUser(null);
 
     try {
@@ -81,60 +35,66 @@ export function SessionProvider({ children }: PropsWithChildren) {
         method: 'POST'
       });
     } catch {
-      // Logout should still clear local session if the API call fails.
+      // Local session should still be cleared if logout fails.
     }
-  };
-
-  const storeSession = (nextToken: string, nextUser: SessionUser) => {
-    const next = { token: nextToken, user: nextUser };
-    persistSession(next);
-    setToken(nextToken);
-    setUser(nextUser);
   };
 
   const refreshSession = async () => {
-    if (!token) {
-      return;
-    }
-
     try {
       const me = await apiRequest<{ userId: string; email: string; role: SessionUser['role'] }>(
-        '/auth/me',
-        { token }
+        '/auth/me'
       );
-      const normalizedUser = normalizeSessionUser(me);
-      storeSession(token, normalizedUser);
-    } catch {
-      await clearSession();
+      setUser(normalizeSessionUser(me));
+    } catch (meError) {
+      try {
+        const refreshed = await apiRequest<{ user: SessionUser }>('/auth/refresh', {
+          method: 'POST'
+        });
+        setUser(normalizeSessionUser(refreshed.user));
+      } catch {
+        setUser(null);
+
+        if (meError instanceof ApiError && meError.status >= 500) {
+          throw meError;
+        }
+      }
+    } finally {
+      setReady(true);
     }
   };
+
+  useEffect(() => {
+    void refreshSession();
+  }, []);
 
   const value = useMemo<SessionContextValue>(
     () => ({
       ready,
-      token,
+      token: null,
       user,
-      isAuthenticated: Boolean(token && user),
+      isAuthenticated: Boolean(user),
       login: async (input) => {
-        const result = await apiRequest<{ accessToken: string; user: SessionUser }>('/auth/login', {
+        const result = await apiRequest<{ user: SessionUser }>('/auth/login', {
           method: 'POST',
           body: JSON.stringify(input)
         });
-        storeSession(result.accessToken, normalizeSessionUser(result.user));
-        return normalizeSessionUser(result.user);
+        const nextUser = normalizeSessionUser(result.user);
+        setUser(nextUser);
+        return nextUser;
       },
       signup: async (input) => {
-        const result = await apiRequest<{ accessToken: string; user: SessionUser }>('/auth/signup', {
+        const result = await apiRequest<{ user: SessionUser }>('/auth/signup', {
           method: 'POST',
           body: JSON.stringify(input)
         });
-        storeSession(result.accessToken, normalizeSessionUser(result.user));
-        return normalizeSessionUser(result.user);
+        const nextUser = normalizeSessionUser(result.user);
+        setUser(nextUser);
+        return nextUser;
       },
       logout: clearSession,
       refreshSession
     }),
-    [ready, token, user]
+    [ready, user]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

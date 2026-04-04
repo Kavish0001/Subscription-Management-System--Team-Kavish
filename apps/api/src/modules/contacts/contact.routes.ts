@@ -137,7 +137,36 @@ contactsRouter.patch('/:id', async (request, response, next) => {
       include: { addresses: true }
     });
 
-    response.json({ data: contact });
+    if (payload.addresses) {
+      await prisma.address.deleteMany({
+        where: { contactId: id }
+      });
+
+      await prisma.address.createMany({
+        data: payload.addresses.map((address) => ({
+          contactId: id,
+          type: address.type,
+          line1: address.line1,
+          line2: address.line2,
+          city: address.city,
+          state: address.state,
+          postalCode: address.postalCode,
+          country: address.country,
+          isDefault: address.isDefault ?? false
+        }))
+      });
+    }
+
+    const refreshedContact = await prisma.contact.findUnique({
+      where: { id },
+      include: {
+        addresses: {
+          orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }]
+        }
+      }
+    });
+
+    response.json({ data: refreshedContact ?? contact });
   } catch (error) {
     next(error);
   }

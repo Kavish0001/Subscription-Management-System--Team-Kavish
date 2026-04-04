@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,6 +8,7 @@ import { ApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
 
 export function SubscriptionFormPage() {
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { token, user } = useSession();
   const [customerContactId, setCustomerContactId] = useState('');
@@ -18,7 +19,18 @@ export function SubscriptionFormPage() {
   const [paymentTermLabel, setPaymentTermLabel] = useState('Immediate payment');
   const [notes, setNotes] = useState('');
   const [createInvoiceNow, setCreateInvoiceNow] = useState(true);
+  const [showContactForm, setShowContactForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    phone: '',
+    companyName: '',
+    line1: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: 'India'
+  });
 
   const contactsQuery = useQuery({
     queryKey: ['admin-contacts'],
@@ -140,6 +152,41 @@ export function SubscriptionFormPage() {
     }
   });
 
+  const createContactMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<Contact>('/contacts', {
+        token,
+        method: 'POST',
+        body: JSON.stringify({
+          name: contactForm.name,
+          phone: contactForm.phone || undefined,
+          companyName: contactForm.companyName || undefined,
+          isDefault: false,
+          addresses: contactForm.line1
+            ? [
+                {
+                  type: 'billing',
+                  line1: contactForm.line1,
+                  city: contactForm.city,
+                  state: contactForm.state,
+                  postalCode: contactForm.postalCode,
+                  country: contactForm.country,
+                  isDefault: true
+                }
+              ]
+            : undefined
+        })
+      }),
+    onSuccess: async (contact) => {
+      setCustomerContactId(contact.id);
+      setShowContactForm(false);
+      await queryClient.invalidateQueries({ queryKey: ['admin-contacts'] });
+    },
+    onError: (mutationError) => {
+      setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to create contact');
+    }
+  });
+
   return (
     <Surface
       title="Subscription Form"
@@ -157,13 +204,18 @@ export function SubscriptionFormPage() {
       {error ? <p className="mb-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Customer">
-          <select className={fieldClass} onChange={(event) => setCustomerContactId(event.target.value)} value={customerContactId}>
-            {contactsQuery.data?.map((contact) => (
-              <option key={contact.id} value={contact.id}>
-                {contact.name}
-              </option>
-            ))}
-          </select>
+          <div className="grid gap-3">
+            <select className={fieldClass} onChange={(event) => setCustomerContactId(event.target.value)} value={customerContactId}>
+              {contactsQuery.data?.map((contact) => (
+                <option key={contact.id} value={contact.id}>
+                  {contact.name}
+                </option>
+              ))}
+            </select>
+            <button className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white" onClick={() => setShowContactForm((value) => !value)} type="button">
+              {showContactForm ? 'Close New Contact' : 'Create New Contact'}
+            </button>
+          </div>
         </Field>
         <Field label="Salesperson">
           {user?.role === 'admin' ? (
@@ -214,6 +266,37 @@ export function SubscriptionFormPage() {
             Create invoice immediately
           </label>
         </div>
+        {showContactForm ? (
+          <div className="grid gap-4 rounded-[28px] border border-white/10 bg-slate-950/35 p-5 md:col-span-2 md:grid-cols-2">
+            <Field label="Contact Name">
+              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, name: event.target.value }))} value={contactForm.name} />
+            </Field>
+            <Field label="Phone">
+              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, phone: event.target.value }))} value={contactForm.phone} />
+            </Field>
+            <Field label="Company">
+              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, companyName: event.target.value }))} value={contactForm.companyName} />
+            </Field>
+            <Field label="Address">
+              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, line1: event.target.value }))} value={contactForm.line1} />
+            </Field>
+            <Field label="City">
+              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, city: event.target.value }))} value={contactForm.city} />
+            </Field>
+            <Field label="State">
+              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, state: event.target.value }))} value={contactForm.state} />
+            </Field>
+            <Field label="Postal Code">
+              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, postalCode: event.target.value }))} value={contactForm.postalCode} />
+            </Field>
+            <Field label="Country">
+              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, country: event.target.value }))} value={contactForm.country} />
+            </Field>
+            <button className="rounded-full bg-gradient-to-r from-emerald-300 to-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 md:col-span-2 md:justify-self-start" onClick={() => createContactMutation.mutate()} type="button">
+              Save Contact
+            </button>
+          </div>
+        ) : null}
       </div>
     </Surface>
   );

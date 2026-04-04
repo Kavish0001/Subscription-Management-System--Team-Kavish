@@ -10,5 +10,6 @@ export {
   ProfilePage,
   OrdersPage,
   OrderDetailPage,
-  InvoiceDetailPage
+  InvoiceDetailPage,
+  SubscriptionPreviewPage
 } from './AccountPages';

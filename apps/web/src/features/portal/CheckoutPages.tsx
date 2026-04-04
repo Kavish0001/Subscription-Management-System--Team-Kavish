@@ -168,62 +168,23 @@ export function CheckoutPaymentPage() {
 
   const paymentMutation = useMutation({
     mutationFn: async () => {
-      const contact = contactQuery.data;
-      if (!contact) {
+      if (!contactQuery.data) {
         throw new ApiError('Contact not loaded', 400);
       }
 
-      const groupedItems = new Map<string, typeof items>();
-      for (const item of items) {
-        const key = item.recurringPlanId ?? 'no-plan';
-        groupedItems.set(key, [...(groupedItems.get(key) ?? []), item]);
-      }
-
-      const subscriptionIds: string[] = [];
-      const invoiceIds: string[] = [];
-
-      for (const [planId, grouped] of groupedItems.entries()) {
-        const subscription = await apiRequest<{ id: string }>('/subscriptions', {
-          token,
-          method: 'POST',
-          body: JSON.stringify({
-            customerContactId: contact.id,
-            recurringPlanId: planId === 'no-plan' ? undefined : planId,
-            sourceChannel: 'portal',
-            paymentTermLabel: 'Immediate payment',
-            notes: discountCode ? `Discount code applied: ${discountCode}` : undefined,
-            lines: grouped.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice * (discountPercent > 0 ? 1 - discountPercent / 100 : 1)
-            }))
-          })
-        });
-
-        const invoice = await apiRequest<{ id: string }>('/invoices', {
-          token,
-          method: 'POST',
-          body: JSON.stringify({
-            subscriptionOrderId: subscription.id,
-            dueDate: new Date().toISOString(),
-            sourceLabel: 'Portal checkout'
-          })
-        });
-
-        await apiRequest('/payments/mock', {
-          token,
-          method: 'POST',
-          body: JSON.stringify({
-            invoiceId: invoice.id,
-            paymentMethod
-          })
-        });
-
-        subscriptionIds.push(subscription.id);
-        invoiceIds.push(invoice.id);
-      }
-
-      return { subscriptionIds, invoiceIds };
+      return apiRequest<{ subscriptionIds: string[]; invoiceIds: string[] }>('/checkout/complete', {
+        token,
+        method: 'POST',
+        body: JSON.stringify({
+          paymentMethod,
+          discountCode: discountCode || undefined,
+          lines: items.map((item) => ({
+            productId: item.productId,
+            recurringPlanId: item.recurringPlanId,
+            quantity: item.quantity
+          }))
+        })
+      });
     },
     onSuccess: async (result) => {
       clearCart();

@@ -22,6 +22,7 @@ import {
   OrdersPage,
   ProductPage,
   ProfilePage,
+  SubscriptionPreviewPage,
   ShopPage
 } from '../features/portal/PortalPages';
 
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
           { path: 'checkout/address', element: <CheckoutAddressPage /> },
           { path: 'checkout/payment', element: <CheckoutPaymentPage /> },
           { path: 'checkout/success', element: <CheckoutSuccessPage /> },
+          { path: 'preview/subscriptions/:id', element: <SubscriptionPreviewPage /> },
           { path: 'account/profile', element: <ProfilePage /> },
           { path: 'account/orders', element: <OrdersPage /> },
           { path: 'account/orders/:id', element: <OrderDetailPage /> },

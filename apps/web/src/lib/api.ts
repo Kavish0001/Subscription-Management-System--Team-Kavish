@@ -87,6 +87,16 @@ export type Discount = {
   createdAt?: string;
 };
 
+export type TaxRule = {
+  id: string;
+  name: string;
+  ratePercent: string | number;
+  taxType: string;
+  isInclusive: boolean;
+  createdAt?: string;
+  computation?: 'percentage' | 'fixed';
+};
+
 export type SubscriptionLine = {
   id: string;
   productId: string;
@@ -112,6 +122,7 @@ export type Subscription = {
   subscriptionNumber: string;
   createdAt: string;
   status: string;
+  relationType?: 'renewal' | 'upsell' | null;
   sourceChannel: string;
   quotationDate: string | null;
   confirmedAt: string | null;
@@ -126,6 +137,18 @@ export type Subscription = {
   recurringPlan: RecurringPlan | null;
   lines: SubscriptionLine[];
   invoices: InvoiceSummary[];
+  parentOrder?: {
+    id: string;
+    subscriptionNumber: string;
+    status: string;
+  } | null;
+  childOrders?: Array<{
+    id: string;
+    subscriptionNumber: string;
+    status: string;
+    relationType: 'renewal' | 'upsell' | null;
+    createdAt: string;
+  }>;
 };
 
 export type Invoice = InvoiceSummary & {
