@@ -6,6 +6,16 @@ export type SessionUser = {
   role: 'admin' | 'internal_user' | 'portal_user';
 };
 
+export type AdminUser = {
+  id: string;
+  email: string;
+  role: SessionUser['role'];
+  isActive: boolean;
+  name: string | null;
+  createdAt?: string;
+  lastLoginAt?: string | null;
+};
+
 export type Address = {
   id: string;
   type: string;

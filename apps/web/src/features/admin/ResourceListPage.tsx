@@ -247,6 +247,26 @@ export function ResourceListPage({
     }
   });
 
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId: string) =>
+      apiRequest(`/products/${productId}`, {
+        token,
+        method: 'DELETE'
+      }),
+    onSuccess: async () => {
+      setError(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin-products'] }),
+        queryClient.invalidateQueries({ queryKey: ['portal-products'] }),
+        queryClient.invalidateQueries({ queryKey: ['subscription-form-products'] }),
+        queryClient.invalidateQueries({ queryKey: ['product-detail'] })
+      ]);
+    },
+    onError: (mutationError) => {
+      setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to delete product');
+    }
+  });
+
   const handleProductPhotosSelected = async (files: FileList | null) => {
     if (!files?.length) {
       setProductForm((value) => ({ ...value, imageUrls: [] }));
@@ -543,7 +563,22 @@ export function ResourceListPage({
                     <td className="px-4 py-3">{product.name}</td>
                     <td className="px-4 py-3">{product.isSubscriptionEnabled ? 'Subscription' : 'Standard'}</td>
                     <td className="px-4 py-3">{formatCurrency(product.baseSalesPrice)}</td>
-                    <td className="px-4 py-3 text-slate-300">{product.slug}</td>
+                    <td className="px-4 py-3 text-slate-300">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>{product.slug}</span>
+                        <button
+                          className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200"
+                          onClick={() => {
+                            if (window.confirm(`Delete product ${product.name}?`)) {
+                              deleteProductMutation.mutate(product.id);
+                            }
+                          }}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               : null}

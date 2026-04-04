@@ -6,6 +6,7 @@ import { ReportsPage } from '../features/admin/ReportsPage';
 import { ResourceListPage } from '../features/admin/ResourceListPage';
 import { SubscriptionFormPage } from '../features/admin/SubscriptionFormPage';
 import { TaxListPage } from '../features/admin/TaxListPage';
+import { UsersPage } from '../features/admin/UsersPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { SignupPage } from '../features/auth/SignupPage';
@@ -109,6 +110,11 @@ export const router = createBrowserRouter([
             )
           },
           { path: 'reports', element: <ReportsPage /> },
+          {
+            path: 'users',
+            element: <RequireAuth roles={['admin']} />,
+            children: [{ index: true, element: <UsersPage /> }]
+          },
           { path: '*', element: <Navigate replace to="/admin" /> }
         ]
       }

@@ -12,24 +12,27 @@ import {
   ReceiptIcon,
   RefreshCycleIcon,
   TagPercentIcon,
-  PercentIcon
+  PercentIcon,
+  UsersIcon
 } from '../../components/icons';
 import { Shell } from '../../components/layout';
 import { useSession } from '../../lib/session';
 
-const navigation = [
-  { label: 'Dashboard', to: '/admin', icon: GridIcon, detail: 'KPIs and activity', end: true },
-  { label: 'Subscriptions', to: '/admin/subscriptions', icon: RefreshCycleIcon, detail: 'Lifecycle controls' },
-  { label: 'Products', to: '/admin/products', icon: CubeIcon, detail: 'Catalog items' },
-  { label: 'Recurring Plans', to: '/admin/recurring-plans', icon: CalendarRepeatIcon, detail: 'Cadence and pricing' },
-  { label: 'Taxes', to: '/admin/taxes', icon: PercentIcon, detail: 'Rates and rules' },
-  { label: 'Discounts', to: '/admin/discounts', icon: TagPercentIcon, detail: 'Promo rules' },
-  { label: 'Reports', to: '/admin/reports', icon: BarChartIcon, detail: 'Revenue visibility' }
-];
-
 export function AdminLayout() {
   const navigate = useNavigate();
   const { user, logout } = useSession();
+  const navigation = [
+    { label: 'Dashboard', to: '/admin', icon: GridIcon, detail: 'KPIs and activity', end: true },
+    { label: 'Subscriptions', to: '/admin/subscriptions', icon: RefreshCycleIcon, detail: 'Lifecycle controls' },
+    { label: 'Products', to: '/admin/products', icon: CubeIcon, detail: 'Catalog items' },
+    { label: 'Recurring Plans', to: '/admin/recurring-plans', icon: CalendarRepeatIcon, detail: 'Cadence and pricing' },
+    { label: 'Taxes', to: '/admin/taxes', icon: PercentIcon, detail: 'Rates and rules' },
+    { label: 'Discounts', to: '/admin/discounts', icon: TagPercentIcon, detail: 'Promo rules' },
+    { label: 'Reports', to: '/admin/reports', icon: BarChartIcon, detail: 'Revenue visibility' },
+    ...(user?.role === 'admin'
+      ? [{ label: 'Users', to: '/admin/users', icon: UsersIcon, detail: 'Staff access control' }]
+      : [])
+  ];
 
   return (
     <Shell
@@ -57,6 +60,7 @@ export function AdminLayout() {
               <option value="/admin/taxes">Taxes</option>
               <option value="/admin/discounts">Discounts</option>
               <option value="/admin/reports">Reports</option>
+              {user?.role === 'admin' ? <option value="/admin/users">Users</option> : null}
             </select>
           </div>
           <div className="app-pill inline-flex items-center gap-3 rounded-full px-4 py-2 text-sm">

@@ -7,6 +7,7 @@ import {
 } from '@subscription/shared';
 import { Router } from 'express';
 
+import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middleware/auth.js';
 
@@ -81,6 +82,68 @@ catalogRouter.post('/products', requireRole('admin', 'internal_user'), async (re
 
     response.status(201).json({ data: product });
   } catch (error) {
+    next(error);
+  }
+});
+
+catalogRouter.delete('/products/:id', requireRole('admin', 'internal_user'), async (request, response, next) => {
+  try {
+    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+
+    const existing = await prisma.product.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        _count: {
+          select: {
+            quotationTemplateLines: true,
+            subscriptionLines: true,
+          }
+        }
+      }
+    });
+
+    if (!existing) {
+      throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+    }
+
+    if (existing._count.quotationTemplateLines > 0 || existing._count.subscriptionLines > 0) {
+      throw new AppError(
+        'This product is already used in subscriptions or quotation templates and cannot be deleted.',
+        409,
+        'PRODUCT_IN_USE'
+      );
+    }
+
+    await prisma.product.delete({
+      where: { id }
+    });
+
+    response.status(204).send();
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+      return next(
+        new AppError(
+          'This product is already used in subscriptions, invoices, or templates and cannot be deleted.',
+          409,
+          'PRODUCT_IN_USE'
+        )
+      );
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientUnknownRequestError &&
+      String(error.message).includes('violates RESTRICT setting')
+    ) {
+      return next(
+        new AppError(
+          'This product is already used in subscriptions or quotation templates and cannot be deleted.',
+          409,
+          'PRODUCT_IN_USE'
+        )
+      );
+    }
+
     next(error);
   }
 });
