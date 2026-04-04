@@ -283,7 +283,7 @@ export function Shell({
           </nav>
         </aside>
         <main className="min-w-0 p-4 lg:p-8">
-          <div className="app-panel min-w-0 overflow-hidden bg-[linear-gradient(135deg,rgba(240,253,244,0.92),rgba(255,255,255,0.9))] p-5 lg:p-8">
+          <div className="min-w-0 overflow-hidden rounded-[34px] border border-emerald-900/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(240,253,250,0.9))] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)] lg:p-8">
             <header className="mb-6 flex min-w-0 flex-col gap-4 lg:mb-8 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
                 <p className="eyebrow mb-3">{subtitle}</p>
@@ -361,7 +361,12 @@ export function Surface({
   className?: string;
 }>) {
   return (
-    <article className={cn('app-panel min-w-0 p-5 lg:p-6 xl:col-span-12', className)}>
+    <article
+      className={cn(
+        'min-w-0 rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)] lg:p-6 xl:col-span-12',
+        className,
+      )}
+    >
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="section-title">{title}</h2>
@@ -432,37 +437,39 @@ export function AuthShell({
   description: string;
 }>) {
   return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <div className="auth-side">
-          <BrandLockup
-            caption="Automated subscription ERP"
-            center
-            compact
-            className="mb-8"
-            to="/"
-          />
-          <p className="eyebrow mb-3">{eyebrow}</p>
-          <h1 className="page-title mb-4">{title}</h1>
-          <p className="max-w-md muted">{description}</p>
-          <div className="mt-8 grid gap-3">
-            <div className="module-card">
-              <p className="text-sm font-semibold">Connected modules</p>
-              <p className="mt-1 text-sm muted">
-                Products, plans, subscriptions, invoices, taxes, and reports follow one consistent
-                flow.
-              </p>
-            </div>
-            <div className="module-card">
-              <p className="text-sm font-semibold">Precision controls</p>
-              <p className="mt-1 text-sm muted">
-                Low-noise forms and status-driven actions keep accounting and renewals
-                deterministic.
-              </p>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(125,211,174,0.3),transparent_24%),radial-gradient(circle_at_top_right,rgba(167,243,208,0.26),transparent_20%),linear-gradient(180deg,#f4fbf6_0%,#edf7f1_100%)] px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
+      <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl place-items-center">
+        <div className="auth-card">
+          <div className="auth-side">
+            <BrandLockup
+              caption="Automated subscription ERP"
+              center
+              compact
+              className="mb-8"
+              to="/"
+            />
+            <p className="eyebrow mb-3">{eyebrow}</p>
+            <h1 className="page-title mb-4">{title}</h1>
+            <p className="max-w-md muted">{description}</p>
+            <div className="mt-8 grid gap-3">
+              <div className="module-card">
+                <p className="text-sm font-semibold">Connected modules</p>
+                <p className="mt-1 text-sm muted">
+                  Products, plans, subscriptions, invoices, taxes, and reports follow one consistent
+                  flow.
+                </p>
+              </div>
+              <div className="module-card">
+                <p className="text-sm font-semibold">Precision controls</p>
+                <p className="mt-1 text-sm muted">
+                  Low-noise forms and status-driven actions keep accounting and renewals
+                  deterministic.
+                </p>
+              </div>
             </div>
           </div>
+          <div className="auth-form">{children}</div>
         </div>
-        <div className="auth-form">{children}</div>
       </div>
     </div>
   );

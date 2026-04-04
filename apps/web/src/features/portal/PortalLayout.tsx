@@ -46,7 +46,11 @@ export function PortalLayout() {
               className="flex shrink-0 items-center gap-3 rounded-full border border-emerald-900/10 bg-white px-3 py-2"
               to="/"
             >
-              <img alt="Veltrix logo" className="h-9 w-9 rounded-full object-contain" src="/veltrix-logo.png" />
+              <img
+                alt="Veltrix logo"
+                className="h-9 w-9 rounded-full object-contain"
+                src="/veltrix-logo.png"
+              />
               <div className="hidden sm:block">
                 <p className="text-sm font-semibold tracking-[-0.03em]">Veltrix</p>
                 <p className="text-xs text-slate-500">External user space</p>

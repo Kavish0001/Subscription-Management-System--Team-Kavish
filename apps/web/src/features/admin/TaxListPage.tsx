@@ -17,12 +17,12 @@ export function TaxListPage() {
     name: '',
     computation: 'percentage' as 'percentage' | 'fixed',
     amount: '18',
-    taxType: 'gst'
+    taxType: 'gst',
   });
 
   const taxesQuery = useQuery({
     queryKey: ['admin-taxes'],
-    queryFn: () => apiRequest<TaxRule[]>('/taxes', { token })
+    queryFn: () => apiRequest<TaxRule[]>('/taxes', { token }),
   });
 
   const createMutation = useMutation({
@@ -35,8 +35,8 @@ export function TaxListPage() {
           computation: form.computation,
           amount: Number(form.amount),
           taxType: form.taxType,
-          isInclusive: false
-        })
+          isInclusive: false,
+        }),
       }),
     onSuccess: async () => {
       setError(null);
@@ -44,20 +44,20 @@ export function TaxListPage() {
         name: '',
         computation: 'percentage',
         amount: '18',
-        taxType: 'gst'
+        taxType: 'gst',
       });
       await queryClient.invalidateQueries({ queryKey: ['admin-taxes'] });
     },
     onError: (mutationError) => {
       setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to create tax');
-    }
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) =>
       apiRequest<void>(`/taxes/${id}`, {
         token,
-        method: 'DELETE'
+        method: 'DELETE',
       }),
     onSuccess: async () => {
       setError(null);
@@ -65,12 +65,14 @@ export function TaxListPage() {
     },
     onError: (mutationError) => {
       setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to delete tax');
-    }
+    },
   });
 
   const rows = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    return (taxesQuery.data ?? []).filter((tax) => !normalizedSearch || tax.name.toLowerCase().includes(normalizedSearch));
+    return (taxesQuery.data ?? []).filter(
+      (tax) => !normalizedSearch || tax.name.toLowerCase().includes(normalizedSearch),
+    );
   }, [search, taxesQuery.data]);
 
   return (
@@ -80,29 +82,61 @@ export function TaxListPage() {
     >
       {error ? <p className="theme-message theme-message-error mb-4">{error}</p> : null}
       <div className="mb-5">
-        <input className={fieldClass} onChange={(event) => setSearch(event.target.value)} placeholder="Search taxes" value={search} />
+        <input
+          className={fieldClass}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search taxes"
+          value={search}
+        />
       </div>
       <div className="app-card mb-6 grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
         <label className="app-label">
           Tax name
-          <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} value={form.name} />
+          <input
+            className={fieldClass}
+            onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
+            value={form.name}
+          />
         </label>
         <label className="app-label">
           Computation
-          <select className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, computation: event.target.value as 'percentage' | 'fixed' }))} value={form.computation}>
+          <select
+            className={fieldClass}
+            onChange={(event) =>
+              setForm((value) => ({
+                ...value,
+                computation: event.target.value as 'percentage' | 'fixed',
+              }))
+            }
+            value={form.computation}
+          >
             <option value="percentage">Percentage</option>
             <option value="fixed">Fixed price</option>
           </select>
         </label>
         <label className="app-label">
           Amount
-          <input className={fieldClass} min="0" onChange={(event) => setForm((value) => ({ ...value, amount: event.target.value }))} type="number" value={form.amount} />
+          <input
+            className={fieldClass}
+            min="0"
+            onChange={(event) => setForm((value) => ({ ...value, amount: event.target.value }))}
+            type="number"
+            value={form.amount}
+          />
         </label>
         <label className="app-label">
           Tax type
-          <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, taxType: event.target.value }))} value={form.taxType} />
+          <input
+            className={fieldClass}
+            onChange={(event) => setForm((value) => ({ ...value, taxType: event.target.value }))}
+            value={form.taxType}
+          />
         </label>
-        <button className="app-btn app-btn-primary md:col-span-2 xl:col-span-4 xl:justify-self-start" onClick={() => createMutation.mutate()} type="button">
+        <button
+          className="app-btn app-btn-primary md:col-span-2 xl:col-span-4 xl:justify-self-start"
+          onClick={() => createMutation.mutate()}
+          type="button"
+        >
           Save tax
         </button>
       </div>
@@ -124,12 +158,18 @@ export function TaxListPage() {
                 <td className="px-4 py-3">{tax.name}</td>
                 <td className="px-4 py-3 capitalize">{tax.computation}</td>
                 <td className="px-4 py-3">
-                  {tax.computation === 'fixed' ? formatCurrency(tax.amount ?? tax.ratePercent) : `${tax.amount ?? tax.ratePercent}%`}
+                  {tax.computation === 'fixed'
+                    ? formatCurrency(tax.amount ?? tax.ratePercent)
+                    : `${tax.amount ?? tax.ratePercent}%`}
                 </td>
                 <td className="px-4 py-3">{tax.taxType}</td>
                 <td className="px-4 py-3 muted">{formatDate(tax.updatedAt ?? tax.createdAt)}</td>
                 <td className="px-4 py-3">
-                  <button className="app-btn app-btn-danger px-3 py-1 text-xs" onClick={() => deleteMutation.mutate(tax.id)} type="button">
+                  <button
+                    className="app-btn app-btn-danger px-3 py-1 text-xs"
+                    onClick={() => deleteMutation.mutate(tax.id)}
+                    type="button"
+                  >
                     Delete
                   </button>
                 </td>
@@ -137,7 +177,9 @@ export function TaxListPage() {
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-6" colSpan={6}>No taxes yet.</td>
+                <td className="px-4 py-6" colSpan={6}>
+                  No taxes yet.
+                </td>
               </tr>
             ) : null}
           </tbody>

@@ -25,7 +25,7 @@ const emptyUserForm = (): UserFormState => ({
   phone: '',
   address: '',
   password: '',
-  role: 'internal_user'
+  role: 'internal_user',
 });
 
 export function UsersPage() {
@@ -39,7 +39,7 @@ export function UsersPage() {
 
   const usersQuery = useQuery({
     queryKey: ['admin-users-management'],
-    queryFn: () => apiRequest<AdminUser[]>('/users', { token })
+    queryFn: () => apiRequest<AdminUser[]>('/users', { token }),
   });
 
   const createUserMutation = useMutation({
@@ -53,8 +53,8 @@ export function UsersPage() {
           phone: form.phone || undefined,
           address: form.address || undefined,
           password: form.password,
-          role: form.role
-        })
+          role: form.role,
+        }),
       }),
     onSuccess: async () => {
       setError(null);
@@ -64,15 +64,18 @@ export function UsersPage() {
     },
     onError: (mutationError) => {
       setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to create user');
-    }
+    },
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async (input: { userId: string; payload: Partial<AdminUser> & { role?: 'portal_user' | 'internal_user' } }) =>
+    mutationFn: async (input: {
+      userId: string;
+      payload: Partial<AdminUser> & { role?: 'portal_user' | 'internal_user' };
+    }) =>
       apiRequest<AdminUser>(`/users/${input.userId}`, {
         token,
         method: 'PATCH',
-        body: JSON.stringify(input.payload)
+        body: JSON.stringify(input.payload),
       }),
     onSuccess: async () => {
       setError(null);
@@ -80,7 +83,7 @@ export function UsersPage() {
     },
     onError: (mutationError) => {
       setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to update user');
-    }
+    },
   });
 
   const users = useMemo(() => {
@@ -103,18 +106,23 @@ export function UsersPage() {
       all: usersQuery.data?.length ?? 0,
       admin: usersQuery.data?.filter((entry) => entry.role === 'admin').length ?? 0,
       internal_user: usersQuery.data?.filter((entry) => entry.role === 'internal_user').length ?? 0,
-      portal_user: usersQuery.data?.filter((entry) => entry.role === 'portal_user').length ?? 0
+      portal_user: usersQuery.data?.filter((entry) => entry.role === 'portal_user').length ?? 0,
     }),
-    [usersQuery.data]
+    [usersQuery.data],
   );
 
   return (
-    <Surface title="Users" description="Admin-managed user records with an auto-linked default contact.">
+    <Surface
+      title="Users"
+      description="Admin-managed user records with an auto-linked default contact."
+    >
       {error ? <p className="theme-message theme-message-error mb-4">{error}</p> : null}
 
       <div className="mb-6 flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold text-[color:var(--color-text-primary)]">Create User</h3>
+          <h3 className="text-lg font-semibold text-[color:var(--color-text-primary)]">
+            Create User
+          </h3>
           <p className="text-sm muted">Default contact auto-linked on creation.</p>
         </div>
         <button
@@ -132,24 +140,75 @@ export function UsersPage() {
       {showCreateForm ? (
         <div className="app-card mb-6 p-5">
           <div className="mb-4">
-            <h3 className="text-lg font-semibold text-[color:var(--color-text-primary)]">New User</h3>
+            <h3 className="text-lg font-semibold text-[color:var(--color-text-primary)]">
+              New User
+            </h3>
             <p className="text-sm muted">Default contact auto-linked on creation.</p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Name"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} value={form.name} /></Field>
-            <Field label="Email"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))} value={form.email} /></Field>
-            <Field label="Phone"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))} value={form.phone} /></Field>
+            <Field label="Name">
+              <input
+                className={fieldClass}
+                onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
+                value={form.name}
+              />
+            </Field>
+            <Field label="Email">
+              <input
+                className={fieldClass}
+                onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))}
+                value={form.email}
+              />
+            </Field>
+            <Field label="Phone">
+              <input
+                className={fieldClass}
+                onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))}
+                value={form.phone}
+              />
+            </Field>
             <Field label="Role">
-              <select className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, role: event.target.value as 'admin' | 'internal_user' }))} value={form.role}>
+              <select
+                className={fieldClass}
+                onChange={(event) =>
+                  setForm((value) => ({
+                    ...value,
+                    role: event.target.value as 'admin' | 'internal_user',
+                  }))
+                }
+                value={form.role}
+              >
                 <option value="internal_user">Internal User</option>
                 <option value="admin">Admin</option>
               </select>
             </Field>
-            <Field className="md:col-span-2" label="Address"><textarea className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, address: event.target.value }))} rows={3} value={form.address} /></Field>
-            <Field label="Password"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))} type="password" value={form.password} /></Field>
+            <Field className="md:col-span-2" label="Address">
+              <textarea
+                className={fieldClass}
+                onChange={(event) =>
+                  setForm((value) => ({ ...value, address: event.target.value }))
+                }
+                rows={3}
+                value={form.address}
+              />
+            </Field>
+            <Field label="Password">
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setForm((value) => ({ ...value, password: event.target.value }))
+                }
+                type="password"
+                value={form.password}
+              />
+            </Field>
           </div>
           <div className="mt-4">
-            <button className="app-btn app-btn-primary" onClick={() => createUserMutation.mutate()} type="button">
+            <button
+              className="app-btn app-btn-primary"
+              onClick={() => createUserMutation.mutate()}
+              type="button"
+            >
               Create User
             </button>
           </div>
@@ -163,7 +222,11 @@ export function UsersPage() {
           placeholder="Search by email, name, or default contact"
           value={search}
         />
-        <select className={fieldClass} onChange={(event) => setRoleFilter(event.target.value as RoleFilter)} value={roleFilter}>
+        <select
+          className={fieldClass}
+          onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
+          value={roleFilter}
+        >
           <option value="all">All roles</option>
           <option value="portal_user">Portal users</option>
           <option value="internal_user">Internal users</option>
@@ -195,20 +258,24 @@ export function UsersPage() {
             {users.length === 0 ? (
               <tr>
                 <td className="px-4 py-8" colSpan={7}>
-                  No users match the current filter. If `Admins` is selected, only the protected admin account will appear.
+                  No users match the current filter. If `Admins` is selected, only the protected
+                  admin account will appear.
                 </td>
               </tr>
             ) : null}
             {users.map((entry) => {
               const isSelf = user?.id === entry.id;
               const isAdmin = entry.role === 'admin';
-              const isUpdating = updateUserMutation.isPending && updateUserMutation.variables?.userId === entry.id;
+              const isUpdating =
+                updateUserMutation.isPending && updateUserMutation.variables?.userId === entry.id;
 
               return (
                 <tr key={entry.id}>
                   <td className="px-4 py-3">
                     <div>
-                      <p className="font-semibold text-[color:var(--color-text-primary)]">{entry.name ?? 'Unnamed user'}</p>
+                      <p className="font-semibold text-[color:var(--color-text-primary)]">
+                        {entry.name ?? 'Unnamed user'}
+                      </p>
                       <p className="text-sm muted">{entry.email}</p>
                       <p className="text-xs subtle">Joined {formatDate(entry.createdAt)}</p>
                     </div>
@@ -219,7 +286,13 @@ export function UsersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={entry.isActive ? 'app-chip app-chip-success text-[11px]' : 'app-chip text-[11px]'}>
+                    <span
+                      className={
+                        entry.isActive
+                          ? 'app-chip app-chip-success text-[11px]'
+                          : 'app-chip text-[11px]'
+                      }
+                    >
                       {entry.isActive ? 'Active' : 'Disabled'}
                     </span>
                   </td>
@@ -237,7 +310,9 @@ export function UsersPage() {
                       <span className="muted">Missing default contact</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap muted">{entry.lastLoginAt ? formatDate(entry.lastLoginAt) : 'Never'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap muted">
+                    {entry.lastLoginAt ? formatDate(entry.lastLoginAt) : 'Never'}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       {isAdmin ? (
@@ -249,7 +324,12 @@ export function UsersPage() {
                         <button
                           className="app-btn app-btn-soft whitespace-nowrap px-3 py-1 text-xs"
                           disabled={isUpdating}
-                          onClick={() => updateUserMutation.mutate({ userId: entry.id, payload: { role: 'internal_user' } })}
+                          onClick={() =>
+                            updateUserMutation.mutate({
+                              userId: entry.id,
+                              payload: { role: 'internal_user' },
+                            })
+                          }
                           type="button"
                         >
                           Make Internal
@@ -259,7 +339,12 @@ export function UsersPage() {
                         <button
                           className="app-btn app-btn-secondary whitespace-nowrap px-3 py-1 text-xs"
                           disabled={isUpdating}
-                          onClick={() => updateUserMutation.mutate({ userId: entry.id, payload: { role: 'portal_user' } })}
+                          onClick={() =>
+                            updateUserMutation.mutate({
+                              userId: entry.id,
+                              payload: { role: 'portal_user' },
+                            })
+                          }
                           type="button"
                         >
                           Remove Internal
@@ -267,14 +352,18 @@ export function UsersPage() {
                       ) : null}
                       {!isAdmin ? (
                         <button
-                          className={entry.isActive ? 'app-btn app-btn-danger whitespace-nowrap px-3 py-1 text-xs' : 'app-btn app-btn-soft whitespace-nowrap px-3 py-1 text-xs'}
+                          className={
+                            entry.isActive
+                              ? 'app-btn app-btn-danger whitespace-nowrap px-3 py-1 text-xs'
+                              : 'app-btn app-btn-soft whitespace-nowrap px-3 py-1 text-xs'
+                          }
                           disabled={isUpdating || isSelf}
                           onClick={() =>
                             updateUserMutation.mutate({
                               userId: entry.id,
                               payload: {
-                                isActive: !entry.isActive
-                              }
+                                isActive: !entry.isActive,
+                              },
                             })
                           }
                           type="button"
@@ -299,18 +388,20 @@ export function UserDetailPage() {
   const { token } = useSession();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<Omit<UserFormState, 'password' | 'role'> & { role: 'portal_user' | 'internal_user' | 'admin' }>({
+  const [form, setForm] = useState<
+    Omit<UserFormState, 'password' | 'role'> & { role: 'portal_user' | 'internal_user' | 'admin' }
+  >({
     name: '',
     email: '',
     phone: '',
     address: '',
-    role: 'portal_user'
+    role: 'portal_user',
   });
 
   const userQuery = useQuery({
     queryKey: ['admin-user-detail', id],
     queryFn: () => apiRequest<AdminUser>(`/users/${id}`, { token }),
-    enabled: Boolean(id)
+    enabled: Boolean(id),
   });
 
   useEffect(() => {
@@ -323,7 +414,7 @@ export function UserDetailPage() {
       email: userQuery.data.email,
       phone: userQuery.data.phone ?? '',
       address: userQuery.data.address ?? '',
-      role: userQuery.data.role
+      role: userQuery.data.role,
     });
   }, [userQuery.data]);
 
@@ -337,51 +428,98 @@ export function UserDetailPage() {
           email: form.email,
           phone: form.phone || null,
           address: form.address || null,
-          role: form.role === 'admin' ? undefined : form.role
-        })
+          role: form.role === 'admin' ? undefined : form.role,
+        }),
       }),
     onSuccess: async () => {
       setError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-users-management'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-user-detail', id] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-contacts-management'] })
+        queryClient.invalidateQueries({ queryKey: ['admin-contacts-management'] }),
       ]);
     },
     onError: (mutationError) => {
       setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to save user');
-    }
+    },
   });
 
   const entry = userQuery.data;
 
   return (
-    <Surface title={entry?.name ?? 'User'} description="User profile data stays synchronized with the linked default contact.">
-      {error ? <p className="mb-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
+    <Surface
+      title={entry?.name ?? 'User'}
+      description="User profile data stays synchronized with the linked default contact."
+    >
+      {error ? <p className="theme-message theme-message-error mb-4">{error}</p> : null}
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Name"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} value={form.name} /></Field>
-        <Field label="Email"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))} value={form.email} /></Field>
-        <Field label="Phone"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))} value={form.phone} /></Field>
+        <Field label="Name">
+          <input
+            className={fieldClass}
+            onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
+            value={form.name}
+          />
+        </Field>
+        <Field label="Email">
+          <input
+            className={fieldClass}
+            onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))}
+            value={form.email}
+          />
+        </Field>
+        <Field label="Phone">
+          <input
+            className={fieldClass}
+            onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))}
+            value={form.phone}
+          />
+        </Field>
         <Field label="Role">
-          <select className={fieldClass} disabled={entry?.role === 'admin'} onChange={(event) => setForm((value) => ({ ...value, role: event.target.value as 'portal_user' | 'internal_user' | 'admin' }))} value={form.role}>
+          <select
+            className={fieldClass}
+            disabled={entry?.role === 'admin'}
+            onChange={(event) =>
+              setForm((value) => ({
+                ...value,
+                role: event.target.value as 'portal_user' | 'internal_user' | 'admin',
+              }))
+            }
+            value={form.role}
+          >
             <option value="portal_user">Portal User</option>
             <option value="internal_user">Internal User</option>
             <option value="admin">Admin</option>
           </select>
         </Field>
-        <Field className="md:col-span-2" label="Address"><textarea className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, address: event.target.value }))} rows={4} value={form.address} /></Field>
+        <Field className="md:col-span-2" label="Address">
+          <textarea
+            className={fieldClass}
+            onChange={(event) => setForm((value) => ({ ...value, address: event.target.value }))}
+            rows={4}
+            value={form.address}
+          />
+        </Field>
         <Field label="Related Contact">
           {entry?.defaultContact ? (
-            <Link className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm font-semibold text-white" to={`/admin/contacts/${entry.defaultContact.id}`}>
+            <Link
+              className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] px-4 py-3 text-sm font-semibold text-[color:var(--color-text-primary)]"
+              to={`/admin/contacts/${entry.defaultContact.id}`}
+            >
               {entry.defaultContact.name} | Open Contact
             </Link>
           ) : (
-            <div className="rounded-2xl border border-dashed border-white/10 px-4 py-3 text-sm text-slate-400">Default contact auto-linked</div>
+            <div className="rounded-2xl border border-dashed border-[color:var(--color-border)] px-4 py-3 text-sm muted">
+              Default contact auto-linked
+            </div>
           )}
         </Field>
       </div>
       <div className="mt-6">
-        <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => saveMutation.mutate()} type="button">
+        <button
+          className="app-btn app-btn-primary"
+          onClick={() => saveMutation.mutate()}
+          type="button"
+        >
           Save
         </button>
       </div>
@@ -389,7 +527,15 @@ export function UserDetailPage() {
   );
 }
 
-function Field({ children, className, label }: { children: React.ReactNode; className?: string; label: string }) {
+function Field({
+  children,
+  className,
+  label,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  label: string;
+}) {
   return (
     <label className={`app-label ${className ?? ''}`}>
       {label}

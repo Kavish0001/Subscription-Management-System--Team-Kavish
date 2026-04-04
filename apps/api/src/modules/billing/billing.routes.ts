@@ -78,6 +78,63 @@ function paymentMetadataToObject(metadata: Prisma.JsonValue | null | undefined) 
   return metadata as Record<string, unknown>;
 }
 
+async function resolveCheckoutContact(auth: NonNullable<AuthenticatedRequest['auth']>) {
+  const contact =
+    (await prisma.contact.findFirst({
+      where: {
+        userId: auth.userId,
+        isActive: true,
+        isDefault: true
+      }
+    })) ??
+    (await prisma.contact.findFirst({
+      where: {
+        userId: auth.userId,
+        isActive: true
+      },
+      orderBy: [{ createdAt: 'asc' }]
+    }));
+
+  if (contact) {
+    return contact;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: auth.userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      phone: true,
+      address: true
+    }
+  });
+
+  if (!user) {
+    throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+  }
+
+  const created = await prisma.contact.create({
+    data: {
+      userId: user.id,
+      name: user.name?.trim() || user.email,
+      email: user.email,
+      phone: user.phone,
+      address: user.address,
+      isDefault: true
+    }
+  });
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      defaultContactId: created.id
+    }
+  });
+
+  return created;
+}
+
 async function buildPortalCheckoutSummary(
   db: typeof prisma,
   payload: {
@@ -249,7 +306,7 @@ billingRouter.get('/invoices/:id', async (request: Request<InvoiceIdParams>, res
   }
 });
 
-billingRouter.post('/checkout/summary', requireRole('portal_user'), async (request, response, next) => {
+billingRouter.post('/checkout/summary', async (request, response, next) => {
   try {
     const payload = portalCheckoutSummarySchema.parse(request.body);
     const summary = await buildPortalCheckoutSummary(prisma, payload);
@@ -272,21 +329,7 @@ billingRouter.post('/payments/razorpay/order', async (request, response, next) =
     const payload = razorpayOrderCreateSchema.parse(request.body);
 
     if (payload.purpose === 'checkout') {
-      if (auth.role !== 'portal_user') {
-        throw new AppError('Only portal users can create checkout payments', 403);
-      }
-
-      const contact = await prisma.contact.findFirst({
-        where: {
-          userId: auth.userId,
-          isActive: true
-        },
-        orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }]
-      });
-
-      if (!contact) {
-        throw new AppError('Contact not found', 404, 'CONTACT_NOT_FOUND');
-      }
+      const contact = await resolveCheckoutContact(auth);
 
       const summary = await buildPortalCheckoutSummary(prisma, {
         discountCode: payload.discountCode,
@@ -343,7 +386,7 @@ billingRouter.post('/payments/razorpay/order', async (request, response, next) =
                 customerContactId: contact.id,
                 salespersonUserId: auth.userId,
                 recurringPlanId: recurringPlan?.id,
-                sourceChannel: 'portal',
+                sourceChannel: auth.role === 'portal_user' ? 'portal' : 'admin',
                 status: SubscriptionStatus.confirmed,
                 quotationDate: now,
                 quotationExpiresAt: now,

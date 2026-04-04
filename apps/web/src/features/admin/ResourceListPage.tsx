@@ -3,7 +3,16 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Surface } from '../../components/layout';
-import { apiRequest, formatCurrency, formatDate, type Discount, type PaginatedResponse, type Product, type RecurringPlan, type Subscription } from '../../lib/api';
+import {
+  apiRequest,
+  formatCurrency,
+  formatDate,
+  type Discount,
+  type PaginatedResponse,
+  type Product,
+  type RecurringPlan,
+  type Subscription,
+} from '../../lib/api';
 import { ApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
 
@@ -14,7 +23,7 @@ const fieldClass = 'app-input';
 export function ResourceListPage({
   title,
   description,
-  resource
+  resource,
 }: {
   title: string;
   description: string;
@@ -39,14 +48,14 @@ export function ResourceListPage({
     defaultPlanId: '',
     planOverrides: {} as Record<string, string>,
     baseSalesPrice: '999',
-    costPrice: '249'
+    costPrice: '249',
   });
   const [planForm, setPlanForm] = useState({
     name: '',
     intervalCount: '1',
     intervalUnit: 'month',
     price: '999',
-    minimumQuantity: '1'
+    minimumQuantity: '1',
   });
   const [discountForm, setDiscountForm] = useState({
     name: '',
@@ -54,26 +63,29 @@ export function ResourceListPage({
     discountType: 'percentage',
     value: '10',
     minimumPurchase: '500',
-    scopeType: 'subscriptions'
+    scopeType: 'subscriptions',
   });
 
   const productsQuery = useQuery({
     queryKey: ['admin-products', page],
     queryFn: () =>
-      apiRequest<PaginatedResponse<Product>>(`/products?page=${page}&pageSize=${ADMIN_LIST_PAGE_SIZE}`, { token }),
-    enabled: resource === 'products'
+      apiRequest<PaginatedResponse<Product>>(
+        `/products?page=${page}&pageSize=${ADMIN_LIST_PAGE_SIZE}`,
+        { token },
+      ),
+    enabled: resource === 'products',
   });
 
   const plansQuery = useQuery({
     queryKey: ['admin-plans'],
     queryFn: () => apiRequest<RecurringPlan[]>('/recurring-plans', { token }),
-    enabled: resource === 'recurring-plans' || resource === 'products'
+    enabled: resource === 'recurring-plans' || resource === 'products',
   });
 
   const discountsQuery = useQuery({
     queryKey: ['admin-discounts'],
     queryFn: () => apiRequest<Discount[]>('/discounts', { token }),
-    enabled: resource === 'discounts'
+    enabled: resource === 'discounts',
   });
 
   const subscriptionsQuery = useQuery({
@@ -81,9 +93,9 @@ export function ResourceListPage({
     queryFn: () =>
       apiRequest<PaginatedResponse<Subscription>>(
         `/subscriptions?page=${page}&pageSize=${ADMIN_LIST_PAGE_SIZE}${subscriptionContactId ? `&contactId=${encodeURIComponent(subscriptionContactId)}` : ''}${subscriptionStatus ? `&status=${encodeURIComponent(subscriptionStatus)}` : ''}`,
-        { token }
+        { token },
       ),
-    enabled: resource === 'subscriptions'
+    enabled: resource === 'subscriptions',
   });
 
   const allPlanRows = plansQuery.data ?? [];
@@ -104,7 +116,14 @@ export function ResourceListPage({
     }
 
     return subscriptionsQuery.data?.items ?? [];
-  }, [allDiscountRows, allPlanRows, page, productsQuery.data?.items, resource, subscriptionsQuery.data?.items]);
+  }, [
+    allDiscountRows,
+    allPlanRows,
+    page,
+    productsQuery.data?.items,
+    resource,
+    subscriptionsQuery.data?.items,
+  ]);
   const totalRows =
     resource === 'products'
       ? (productsQuery.data?.total ?? 0)
@@ -141,9 +160,9 @@ export function ResourceListPage({
               overridePrice: productForm.planOverrides[recurringPlanId]
                 ? Number(productForm.planOverrides[recurringPlanId])
                 : undefined,
-              isDefaultPlan: recurringPlanId === defaultPlanId
-            }))
-          })
+              isDefaultPlan: recurringPlanId === defaultPlanId,
+            })),
+          }),
         });
       }
 
@@ -160,8 +179,8 @@ export function ResourceListPage({
             autoCloseEnabled: false,
             isClosable: true,
             isPausable: true,
-            isRenewable: true
-          })
+            isRenewable: true,
+          }),
         });
       }
 
@@ -175,8 +194,8 @@ export function ResourceListPage({
           value: Number(discountForm.value),
           minimumPurchase: Number(discountForm.minimumPurchase),
           scopeType: discountForm.scopeType,
-          limitUsageEnabled: false
-        })
+          limitUsageEnabled: false,
+        }),
       });
     },
     onSuccess: async () => {
@@ -192,7 +211,7 @@ export function ResourceListPage({
           defaultPlanId: '',
           planOverrides: {},
           baseSalesPrice: '999',
-          costPrice: '249'
+          costPrice: '249',
         });
         setProductUploadKey((value) => value + 1);
       }
@@ -202,16 +221,29 @@ export function ResourceListPage({
             ? ['admin-products']
             : resource === 'recurring-plans'
               ? ['admin-plans']
-              : ['admin-discounts']
+              : ['admin-discounts'],
       });
     },
     onError: (mutationError) => {
       setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to save record');
-    }
+    },
   });
 
   const workflowMutation = useMutation({
-    mutationFn: async (input: { action: 'send-quotation' | 'confirm' | 'invoice' | 'renew' | 'upsell' | 'cancel' | 'close' | 'reopen' | 'pause' | 'resume'; subscription: Subscription }) => {
+    mutationFn: async (input: {
+      action:
+        | 'send-quotation'
+        | 'confirm'
+        | 'invoice'
+        | 'renew'
+        | 'upsell'
+        | 'cancel'
+        | 'close'
+        | 'reopen'
+        | 'pause'
+        | 'resume';
+      subscription: Subscription;
+    }) => {
       if (input.action === 'invoice') {
         return apiRequest('/invoices', {
           token,
@@ -219,8 +251,8 @@ export function ResourceListPage({
           body: JSON.stringify({
             subscriptionOrderId: input.subscription.id,
             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            sourceLabel: 'Backoffice'
-          })
+            sourceLabel: 'Backoffice',
+          }),
         });
       }
 
@@ -228,51 +260,55 @@ export function ResourceListPage({
         return apiRequest(`/subscriptions/${input.subscription.id}/upsell`, {
           token,
           method: 'POST',
-          body: JSON.stringify({})
+          body: JSON.stringify({}),
         });
       }
 
       return apiRequest(`/subscriptions/${input.subscription.id}/${input.action}`, {
         token,
-        method: 'POST'
+        method: 'POST',
       });
     },
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-subscriptions'] })
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-subscriptions'] }),
       ]);
     },
     onError: (mutationError) => {
-      setError(mutationError instanceof ApiError ? mutationError.message : 'Workflow action failed');
-    }
+      setError(
+        mutationError instanceof ApiError ? mutationError.message : 'Workflow action failed',
+      );
+    },
   });
 
   const deleteSubscriptionMutation = useMutation({
     mutationFn: async (subscriptionId: string) =>
       apiRequest(`/subscriptions/${subscriptionId}`, {
         token,
-        method: 'DELETE'
+        method: 'DELETE',
       }),
     onSuccess: async () => {
       setError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-subscriptions'] })
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-subscriptions'] }),
       ]);
     },
     onError: (mutationError) => {
-      setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to delete subscription');
-    }
+      setError(
+        mutationError instanceof ApiError ? mutationError.message : 'Unable to delete subscription',
+      );
+    },
   });
 
   const deleteProductMutation = useMutation({
     mutationFn: async (productId: string) =>
       apiRequest(`/products/${productId}`, {
         token,
-        method: 'DELETE'
+        method: 'DELETE',
       }),
     onSuccess: async () => {
       setError(null);
@@ -280,12 +316,14 @@ export function ResourceListPage({
         queryClient.invalidateQueries({ queryKey: ['admin-products'] }),
         queryClient.invalidateQueries({ queryKey: ['portal-products'] }),
         queryClient.invalidateQueries({ queryKey: ['subscription-form-products'] }),
-        queryClient.invalidateQueries({ queryKey: ['product-detail'] })
+        queryClient.invalidateQueries({ queryKey: ['product-detail'] }),
       ]);
     },
     onError: (mutationError) => {
-      setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to delete product');
-    }
+      setError(
+        mutationError instanceof ApiError ? mutationError.message : 'Unable to delete product',
+      );
+    },
   });
 
   const handleProductPhotosSelected = async (files: FileList | null) => {
@@ -318,7 +356,7 @@ export function ResourceListPage({
   const removeProductPhoto = (index: number) => {
     setProductForm((value) => ({
       ...value,
-      imageUrls: value.imageUrls.filter((_, imageIndex) => imageIndex !== index)
+      imageUrls: value.imageUrls.filter((_, imageIndex) => imageIndex !== index),
     }));
   };
 
@@ -335,7 +373,7 @@ export function ResourceListPage({
           defaultPlanId: value.defaultPlanId || plan.id,
           planOverrides: value.planOverrides[plan.id]
             ? value.planOverrides
-            : { ...value.planOverrides, [plan.id]: String(plan.price) }
+            : { ...value.planOverrides, [plan.id]: String(plan.price) },
         };
       }
 
@@ -347,7 +385,7 @@ export function ResourceListPage({
         selectedPlanIds,
         defaultPlanId:
           value.defaultPlanId === plan.id ? (selectedPlanIds[0] ?? '') : value.defaultPlanId,
-        planOverrides
+        planOverrides,
       };
     });
   };
@@ -357,10 +395,7 @@ export function ResourceListPage({
       title={title}
       actions={
         resource === 'subscriptions' ? (
-          <Link
-            className="app-btn app-btn-primary"
-            to="/admin/subscriptions/new"
-          >
+          <Link className="app-btn app-btn-primary" to="/admin/subscriptions/new">
             New
           </Link>
         ) : (
@@ -378,7 +413,8 @@ export function ResourceListPage({
       {error ? <p className="theme-message theme-message-error mb-4">{error}</p> : null}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-sm muted">
         <p>
-          Showing {rows.length ? (page - 1) * ADMIN_LIST_PAGE_SIZE + 1 : 0}-{Math.min(page * ADMIN_LIST_PAGE_SIZE, totalRows)} of {totalRows} records
+          Showing {rows.length ? (page - 1) * ADMIN_LIST_PAGE_SIZE + 1 : 0}-
+          {Math.min(page * ADMIN_LIST_PAGE_SIZE, totalRows)} of {totalRows} records
         </p>
         <PaginationControls currentPage={page} onPageChange={setPage} totalPages={totalPages} />
       </div>
@@ -387,10 +423,22 @@ export function ResourceListPage({
           {resource === 'products' ? (
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Product name">
-                <input className={fieldClass} onChange={(event) => setProductForm((value) => ({ ...value, name: event.target.value }))} value={productForm.name} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setProductForm((value) => ({ ...value, name: event.target.value }))
+                  }
+                  value={productForm.name}
+                />
               </Field>
               <Field label="Slug">
-                <input className={fieldClass} onChange={(event) => setProductForm((value) => ({ ...value, slug: event.target.value }))} value={productForm.slug} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setProductForm((value) => ({ ...value, slug: event.target.value }))
+                  }
+                  value={productForm.slug}
+                />
               </Field>
               <Field className="md:col-span-2" label="Product photos">
                 <div className="grid gap-3">
@@ -404,11 +452,17 @@ export function ResourceListPage({
                     }}
                     type="file"
                   />
-                  <p className="text-xs muted">Upload up to 10 photos. The first photo becomes the cover image, and the portal uses all uploaded photos as a slideshow.</p>
+                  <p className="text-xs muted">
+                    Upload up to 10 photos. The first photo becomes the cover image, and the portal
+                    uses all uploaded photos as a slideshow.
+                  </p>
                   {productForm.imageUrls.length ? (
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       {productForm.imageUrls.map((imageUrl, index) => (
-                        <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] p-2" key={imageUrl}>
+                        <div
+                          className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] p-2"
+                          key={imageUrl}
+                        >
                           <img
                             alt={`${productForm.name || 'Product'} preview ${index + 1}`}
                             className="h-32 w-full rounded-xl object-cover"
@@ -437,36 +491,68 @@ export function ResourceListPage({
                 </div>
               </Field>
               <Field label="Description">
-                <textarea className={fieldClass} onChange={(event) => setProductForm((value) => ({ ...value, description: event.target.value }))} rows={4} value={productForm.description} />
+                <textarea
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setProductForm((value) => ({ ...value, description: event.target.value }))
+                  }
+                  rows={4}
+                  value={productForm.description}
+                />
               </Field>
               <Field label="Sales price">
-                <input className={fieldClass} onChange={(event) => setProductForm((value) => ({ ...value, baseSalesPrice: event.target.value }))} type="number" value={productForm.baseSalesPrice} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setProductForm((value) => ({ ...value, baseSalesPrice: event.target.value }))
+                  }
+                  type="number"
+                  value={productForm.baseSalesPrice}
+                />
               </Field>
               <Field label="Cost price">
-                <input className={fieldClass} onChange={(event) => setProductForm((value) => ({ ...value, costPrice: event.target.value }))} type="number" value={productForm.costPrice} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setProductForm((value) => ({ ...value, costPrice: event.target.value }))
+                  }
+                  type="number"
+                  value={productForm.costPrice}
+                />
               </Field>
               <Field className="md:col-span-2" label="Recurring plans">
                 {plansQuery.data?.length ? (
                   <div className="grid gap-3">
-                    <p className="text-xs muted">Choose one or more plans. The default plan is preselected in the portal dropdown.</p>
+                    <p className="text-xs muted">
+                      Choose one or more plans. The default plan is preselected in the portal
+                      dropdown.
+                    </p>
                     <div className="grid gap-3 lg:grid-cols-2">
                       {plansQuery.data.map((plan) => {
                         const isSelected = productForm.selectedPlanIds.includes(plan.id);
 
                         return (
-                          <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] p-4" key={plan.id}>
+                          <div
+                            className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] p-4"
+                            key={plan.id}
+                          >
                             <div className="flex items-start justify-between gap-3">
                               <label className="flex items-start gap-3">
                                 <input
                                   checked={isSelected}
                                   className="mt-1 h-4 w-4"
-                                  onChange={(event) => toggleProductPlan(plan, event.target.checked)}
+                                  onChange={(event) =>
+                                    toggleProductPlan(plan, event.target.checked)
+                                  }
                                   type="checkbox"
                                 />
                                 <span>
-                                  <span className="block font-semibold text-[color:var(--color-text-primary)]">{plan.name}</span>
+                                  <span className="block font-semibold text-[color:var(--color-text-primary)]">
+                                    {plan.name}
+                                  </span>
                                   <span className="text-xs muted">
-                                    {plan.intervalCount} {plan.intervalUnit} • {formatCurrency(plan.price)}
+                                    {plan.intervalCount} {plan.intervalUnit} •{' '}
+                                    {formatCurrency(plan.price)}
                                   </span>
                                 </span>
                               </label>
@@ -476,7 +562,12 @@ export function ResourceListPage({
                                     checked={productForm.defaultPlanId === plan.id}
                                     className="h-4 w-4"
                                     name="defaultPlanId"
-                                    onChange={() => setProductForm((value) => ({ ...value, defaultPlanId: plan.id }))}
+                                    onChange={() =>
+                                      setProductForm((value) => ({
+                                        ...value,
+                                        defaultPlanId: plan.id,
+                                      }))
+                                    }
                                     type="radio"
                                   />
                                   Default
@@ -494,8 +585,8 @@ export function ResourceListPage({
                                         ...value,
                                         planOverrides: {
                                           ...value.planOverrides,
-                                          [plan.id]: event.target.value
-                                        }
+                                          [plan.id]: event.target.value,
+                                        },
                                       }))
                                     }
                                     type="number"
@@ -520,16 +611,42 @@ export function ResourceListPage({
           {resource === 'recurring-plans' ? (
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Recurring name">
-                <input className={fieldClass} onChange={(event) => setPlanForm((value) => ({ ...value, name: event.target.value }))} value={planForm.name} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setPlanForm((value) => ({ ...value, name: event.target.value }))
+                  }
+                  value={planForm.name}
+                />
               </Field>
               <Field label="Price">
-                <input className={fieldClass} onChange={(event) => setPlanForm((value) => ({ ...value, price: event.target.value }))} type="number" value={planForm.price} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setPlanForm((value) => ({ ...value, price: event.target.value }))
+                  }
+                  type="number"
+                  value={planForm.price}
+                />
               </Field>
               <Field label="Billing count">
-                <input className={fieldClass} onChange={(event) => setPlanForm((value) => ({ ...value, intervalCount: event.target.value }))} type="number" value={planForm.intervalCount} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setPlanForm((value) => ({ ...value, intervalCount: event.target.value }))
+                  }
+                  type="number"
+                  value={planForm.intervalCount}
+                />
               </Field>
               <Field label="Billing period">
-                <select className={fieldClass} onChange={(event) => setPlanForm((value) => ({ ...value, intervalUnit: event.target.value }))} value={planForm.intervalUnit}>
+                <select
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setPlanForm((value) => ({ ...value, intervalUnit: event.target.value }))
+                  }
+                  value={planForm.intervalUnit}
+                >
                   <option value="week">Week</option>
                   <option value="month">Month</option>
                   <option value="year">Year</option>
@@ -540,24 +657,53 @@ export function ResourceListPage({
           {resource === 'discounts' ? (
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Discount name">
-                <input className={fieldClass} onChange={(event) => setDiscountForm((value) => ({ ...value, name: event.target.value }))} value={discountForm.name} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setDiscountForm((value) => ({ ...value, name: event.target.value }))
+                  }
+                  value={discountForm.name}
+                />
               </Field>
               <Field label="Code">
-                <input className={fieldClass} onChange={(event) => setDiscountForm((value) => ({ ...value, code: event.target.value }))} value={discountForm.code} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setDiscountForm((value) => ({ ...value, code: event.target.value }))
+                  }
+                  value={discountForm.code}
+                />
               </Field>
               <Field label="Mode">
-                <select className={fieldClass} onChange={(event) => setDiscountForm((value) => ({ ...value, discountType: event.target.value }))} value={discountForm.discountType}>
+                <select
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setDiscountForm((value) => ({ ...value, discountType: event.target.value }))
+                  }
+                  value={discountForm.discountType}
+                >
                   <option value="percentage">Percentage</option>
                   <option value="fixed">Fixed</option>
                 </select>
               </Field>
               <Field label="Value">
-                <input className={fieldClass} onChange={(event) => setDiscountForm((value) => ({ ...value, value: event.target.value }))} type="number" value={discountForm.value} />
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setDiscountForm((value) => ({ ...value, value: event.target.value }))
+                  }
+                  type="number"
+                  value={discountForm.value}
+                />
               </Field>
             </div>
           ) : null}
           <div className="mt-4">
-            <button className="app-btn app-btn-primary" onClick={() => createMutation.mutate()} type="button">
+            <button
+              className="app-btn app-btn-primary"
+              onClick={() => createMutation.mutate()}
+              type="button"
+            >
               Save record
             </button>
           </div>
@@ -588,7 +734,9 @@ export function ResourceListPage({
               ? (rows as Product[]).map((product) => (
                   <tr key={product.id}>
                     <td className="px-4 py-3">{product.name}</td>
-                    <td className="px-4 py-3">{product.isSubscriptionEnabled ? 'Subscription' : 'Standard'}</td>
+                    <td className="px-4 py-3">
+                      {product.isSubscriptionEnabled ? 'Subscription' : 'Standard'}
+                    </td>
                     <td className="px-4 py-3">{formatCurrency(product.baseSalesPrice)}</td>
                     <td className="px-4 py-3 muted">
                       <div className="flex items-center justify-between gap-3">
@@ -628,7 +776,9 @@ export function ResourceListPage({
                     <td className="px-4 py-3">{discount.discountType}</td>
                     <td className="px-4 py-3">{formatCurrency(discount.minimumPurchase ?? 0)}</td>
                     <td className="px-4 py-3 muted">
-                      {discount.discountType === 'percentage' ? `${discount.value}%` : formatCurrency(discount.value)}
+                      {discount.discountType === 'percentage'
+                        ? `${discount.value}%`
+                        : formatCurrency(discount.value)}
                     </td>
                   </tr>
                 ))
@@ -636,7 +786,7 @@ export function ResourceListPage({
             {resource === 'subscriptions'
               ? (rows as Subscription[]).map((subscription) => {
                   const openInvoice = subscription.invoices.find((invoice) =>
-                    ['draft', 'confirmed'].includes(invoice.status)
+                    ['draft', 'confirmed'].includes(invoice.status),
                   );
                   const latestInvoice = subscription.invoices[0];
                   const invoiceDue =
@@ -657,22 +807,48 @@ export function ResourceListPage({
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
                           {['draft', 'quotation'].includes(subscription.status) ? (
-                            <button className="app-btn app-btn-soft px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'send-quotation', subscription })} type="button">
+                            <button
+                              className="app-btn app-btn-soft px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'send-quotation', subscription })
+                              }
+                              type="button"
+                            >
                               Send
                             </button>
                           ) : null}
                           {['quotation', 'quotation_sent'].includes(subscription.status) ? (
-                            <button className="app-btn app-btn-secondary px-3 py-1 text-xs" onClick={() => navigate(`/preview/subscriptions/${subscription.id}`)} type="button">
+                            <button
+                              className="app-btn app-btn-secondary px-3 py-1 text-xs"
+                              onClick={() => navigate(`/preview/subscriptions/${subscription.id}`)}
+                              type="button"
+                            >
                               Preview
                             </button>
                           ) : null}
-                          {['draft', 'quotation', 'quotation_sent'].includes(subscription.status) ? (
-                            <button className="app-btn app-btn-soft px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'confirm', subscription })} type="button">
+                          {['draft', 'quotation', 'quotation_sent'].includes(
+                            subscription.status,
+                          ) ? (
+                            <button
+                              className="app-btn app-btn-soft px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'confirm', subscription })
+                              }
+                              type="button"
+                            >
                               Confirm
                             </button>
                           ) : null}
-                          {!openInvoice && ['confirmed', 'in_progress'].includes(subscription.status) && invoiceDue ? (
-                            <button className="app-btn app-btn-primary px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'invoice', subscription })} type="button">
+                          {!openInvoice &&
+                          ['confirmed', 'in_progress'].includes(subscription.status) &&
+                          invoiceDue ? (
+                            <button
+                              className="app-btn app-btn-primary px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'invoice', subscription })
+                              }
+                              type="button"
+                            >
                               Create Invoice
                             </button>
                           ) : openInvoice ? (
@@ -680,45 +856,101 @@ export function ResourceListPage({
                               {latestInvoice?.status}
                             </span>
                           ) : null}
-                          {['confirmed', 'in_progress', 'closed'].includes(subscription.status) && subscription.recurringPlan?.isRenewable ? (
-                            <button className="app-btn app-btn-secondary px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'renew', subscription })} type="button">
+                          {['confirmed', 'in_progress', 'closed'].includes(subscription.status) &&
+                          subscription.recurringPlan?.isRenewable ? (
+                            <button
+                              className="app-btn app-btn-secondary px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'renew', subscription })
+                              }
+                              type="button"
+                            >
                               Renew
                             </button>
                           ) : null}
                           {['confirmed', 'in_progress', 'closed'].includes(subscription.status) ? (
-                            <button className="app-btn app-btn-secondary px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'upsell', subscription })} type="button">
+                            <button
+                              className="app-btn app-btn-secondary px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'upsell', subscription })
+                              }
+                              type="button"
+                            >
                               Upsell
                             </button>
                           ) : null}
-                          {['confirmed', 'in_progress'].includes(subscription.status) && subscription.recurringPlan?.isClosable ? (
-                            <button className="app-btn app-btn-secondary px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'close', subscription })} type="button">
+                          {['confirmed', 'in_progress'].includes(subscription.status) &&
+                          subscription.recurringPlan?.isClosable ? (
+                            <button
+                              className="app-btn app-btn-secondary px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'close', subscription })
+                              }
+                              type="button"
+                            >
                               Close
                             </button>
                           ) : null}
-                          {['confirmed', 'in_progress'].includes(subscription.status) && subscription.recurringPlan?.isPausable ? (
-                            <button className="app-btn app-btn-secondary px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'pause', subscription })} type="button">
+                          {['confirmed', 'in_progress'].includes(subscription.status) &&
+                          subscription.recurringPlan?.isPausable ? (
+                            <button
+                              className="app-btn app-btn-secondary px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'pause', subscription })
+                              }
+                              type="button"
+                            >
                               Pause
                             </button>
                           ) : null}
-                          {subscription.status === 'paused' && subscription.recurringPlan?.isPausable ? (
-                            <button className="app-btn app-btn-secondary px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'resume', subscription })} type="button">
+                          {subscription.status === 'paused' &&
+                          subscription.recurringPlan?.isPausable ? (
+                            <button
+                              className="app-btn app-btn-secondary px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'resume', subscription })
+                              }
+                              type="button"
+                            >
                               Resume
                             </button>
                           ) : null}
                           {subscription.status === 'closed' ? (
-                            <button className="app-btn app-btn-secondary px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'reopen', subscription })} type="button">
+                            <button
+                              className="app-btn app-btn-secondary px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'reopen', subscription })
+                              }
+                              type="button"
+                            >
                               Reopen
                             </button>
                           ) : null}
-                          {['draft', 'quotation', 'quotation_sent', 'confirmed', 'in_progress'].includes(subscription.status) ? (
-                            <button className="app-btn app-btn-secondary px-3 py-1 text-xs" onClick={() => workflowMutation.mutate({ action: 'cancel', subscription })} type="button">
+                          {[
+                            'draft',
+                            'quotation',
+                            'quotation_sent',
+                            'confirmed',
+                            'in_progress',
+                          ].includes(subscription.status) ? (
+                            <button
+                              className="app-btn app-btn-secondary px-3 py-1 text-xs"
+                              onClick={() =>
+                                workflowMutation.mutate({ action: 'cancel', subscription })
+                              }
+                              type="button"
+                            >
                               Cancel
                             </button>
                           ) : null}
                           <button
                             className="app-btn app-btn-danger px-3 py-1 text-xs"
                             onClick={() => {
-                              if (window.confirm(`Delete subscription ${subscription.subscriptionNumber}? Only draft or quotation records without invoices can be deleted.`)) {
+                              if (
+                                window.confirm(
+                                  `Delete subscription ${subscription.subscriptionNumber}? Only draft or quotation records without invoices can be deleted.`,
+                                )
+                              ) {
                                 deleteSubscriptionMutation.mutate(subscription.id);
                               }
                             }}
@@ -749,7 +981,7 @@ export function ResourceListPage({
 function PaginationControls({
   currentPage,
   onPageChange,
-  totalPages
+  totalPages,
 }: Readonly<{
   currentPage: number;
   onPageChange: (page: number) => void;
@@ -784,7 +1016,15 @@ function PaginationControls({
   );
 }
 
-function Field({ children, className = '', label }: { children: React.ReactNode; className?: string; label: string }) {
+function Field({
+  children,
+  className = '',
+  label,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  label: string;
+}) {
   return (
     <label className={`app-label ${className}`}>
       {label}

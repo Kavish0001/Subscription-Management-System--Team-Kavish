@@ -3,7 +3,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Surface } from '../../components/layout';
-import { apiRequest, formatCurrency, type Contact, type Product, type RecurringPlan, type SessionUser } from '../../lib/api';
+import {
+  apiRequest,
+  formatCurrency,
+  type Contact,
+  type Product,
+  type RecurringPlan,
+  type SessionUser,
+} from '../../lib/api';
 import { ApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
 
@@ -31,31 +38,32 @@ export function SubscriptionFormPage() {
     city: '',
     state: '',
     postalCode: '',
-    country: 'India'
+    country: 'India',
   });
 
   const contactsQuery = useQuery({
     queryKey: ['admin-contacts'],
-    queryFn: () => apiRequest<Contact[]>('/contacts', { token })
+    queryFn: () => apiRequest<Contact[]>('/contacts', { token }),
   });
 
   const usersQuery = useQuery({
     queryKey: ['admin-users'],
-    queryFn: () => apiRequest<Array<Pick<SessionUser, 'id' | 'email' | 'role'>>>('/users', { token }),
-    enabled: user?.role === 'admin'
+    queryFn: () =>
+      apiRequest<Array<Pick<SessionUser, 'id' | 'email' | 'role'>>>('/users', { token }),
+    enabled: user?.role === 'admin',
   });
 
   const productsQuery = useQuery({
     queryKey: ['subscription-form-products'],
     queryFn: () =>
       apiRequest<{ items: Product[] }>('/products?page=1&pageSize=50', { token }).then(
-        (result) => result.items
-      )
+        (result) => result.items,
+      ),
   });
 
   const plansQuery = useQuery({
     queryKey: ['subscription-form-plans'],
-    queryFn: () => apiRequest<RecurringPlan[]>('/recurring-plans', { token })
+    queryFn: () => apiRequest<RecurringPlan[]>('/recurring-plans', { token }),
   });
 
   useEffect(() => {
@@ -82,12 +90,12 @@ export function SubscriptionFormPage() {
 
   const selectedProduct = useMemo(
     () => productsQuery.data?.find((product) => product.id === productId) ?? null,
-    [productId, productsQuery.data]
+    [productId, productsQuery.data],
   );
 
   const availablePlanIds = useMemo(
     () => selectedProduct?.planPricing.map((plan) => plan.recurringPlanId) ?? [],
-    [selectedProduct]
+    [selectedProduct],
   );
 
   useEffect(() => {
@@ -103,9 +111,10 @@ export function SubscriptionFormPage() {
 
   const unitPrice =
     Number(
-      selectedProduct?.planPricing.find((plan) => plan.recurringPlanId === recurringPlanId)?.overridePrice ??
+      selectedProduct?.planPricing.find((plan) => plan.recurringPlanId === recurringPlanId)
+        ?.overridePrice ??
         selectedProduct?.baseSalesPrice ??
-        0
+        0,
     ) || 0;
 
   const saveMutation = useMutation({
@@ -128,18 +137,20 @@ export function SubscriptionFormPage() {
             {
               productId: selectedProduct.id,
               quantity,
-              unitPrice
-            }
-          ]
-        })
+              unitPrice,
+            },
+          ],
+        }),
       });
     },
     onSuccess: () => {
       navigate('/admin/subscriptions');
     },
     onError: (mutationError) => {
-      setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to save subscription');
-    }
+      setError(
+        mutationError instanceof ApiError ? mutationError.message : 'Unable to save subscription',
+      );
+    },
   });
 
   const createContactMutation = useMutation({
@@ -162,11 +173,11 @@ export function SubscriptionFormPage() {
                   state: contactForm.state,
                   postalCode: contactForm.postalCode,
                   country: contactForm.country,
-                  isDefault: true
-                }
+                  isDefault: true,
+                },
               ]
-            : undefined
-        })
+            : undefined,
+        }),
       }),
     onSuccess: async (contact) => {
       setCustomerContactId(contact.id);
@@ -174,8 +185,10 @@ export function SubscriptionFormPage() {
       await queryClient.invalidateQueries({ queryKey: ['admin-contacts'] });
     },
     onError: (mutationError) => {
-      setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to create contact');
-    }
+      setError(
+        mutationError instanceof ApiError ? mutationError.message : 'Unable to create contact',
+      );
+    },
   });
 
   return (
@@ -183,10 +196,18 @@ export function SubscriptionFormPage() {
       title="Subscription Form"
       actions={
         <div className="flex gap-3">
-          <button className="app-btn app-btn-secondary" onClick={() => navigate('/admin/subscriptions')} type="button">
+          <button
+            className="app-btn app-btn-secondary"
+            onClick={() => navigate('/admin/subscriptions')}
+            type="button"
+          >
             Discard
           </button>
-          <button className="app-btn app-btn-primary" onClick={() => saveMutation.mutate()} type="button">
+          <button
+            className="app-btn app-btn-primary"
+            onClick={() => saveMutation.mutate()}
+            type="button"
+          >
             Save
           </button>
         </div>
@@ -196,21 +217,33 @@ export function SubscriptionFormPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Customer">
           <div className="grid gap-3">
-            <select className={fieldClass} onChange={(event) => setCustomerContactId(event.target.value)} value={customerContactId}>
+            <select
+              className={fieldClass}
+              onChange={(event) => setCustomerContactId(event.target.value)}
+              value={customerContactId}
+            >
               {contactsQuery.data?.map((contact) => (
                 <option key={contact.id} value={contact.id}>
                   {contact.name}
                 </option>
               ))}
             </select>
-            <button className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white" onClick={() => setShowContactForm((value) => !value)} type="button">
+            <button
+              className="app-btn app-btn-secondary"
+              onClick={() => setShowContactForm((value) => !value)}
+              type="button"
+            >
               {showContactForm ? 'Close New Contact' : 'Create New Contact'}
             </button>
           </div>
         </Field>
         <Field label="Salesperson">
           {user?.role === 'admin' ? (
-            <select className={fieldClass} onChange={(event) => setSalespersonUserId(event.target.value)} value={salespersonUserId}>
+            <select
+              className={fieldClass}
+              onChange={(event) => setSalespersonUserId(event.target.value)}
+              value={salespersonUserId}
+            >
               {usersQuery.data?.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.email} ({account.role})
@@ -222,7 +255,11 @@ export function SubscriptionFormPage() {
           )}
         </Field>
         <Field label="Product">
-          <select className={fieldClass} onChange={(event) => setProductId(event.target.value)} value={productId}>
+          <select
+            className={fieldClass}
+            onChange={(event) => setProductId(event.target.value)}
+            value={productId}
+          >
             {productsQuery.data?.map((product) => (
               <option key={product.id} value={product.id}>
                 {product.name}
@@ -231,9 +268,15 @@ export function SubscriptionFormPage() {
           </select>
         </Field>
         <Field label="Recurring Plan">
-          <select className={fieldClass} onChange={(event) => setRecurringPlanId(event.target.value)} value={recurringPlanId}>
+          <select
+            className={fieldClass}
+            onChange={(event) => setRecurringPlanId(event.target.value)}
+            value={recurringPlanId}
+          >
             {plansQuery.data
-              ?.filter((plan) => availablePlanIds.length === 0 || availablePlanIds.includes(plan.id))
+              ?.filter(
+                (plan) => availablePlanIds.length === 0 || availablePlanIds.includes(plan.id),
+              )
               .map((plan) => (
                 <option key={plan.id} value={plan.id}>
                   {plan.name}
@@ -242,50 +285,125 @@ export function SubscriptionFormPage() {
           </select>
         </Field>
         <Field label="Payment Term">
-          <input className={fieldClass} onChange={(event) => setPaymentTermLabel(event.target.value)} value={paymentTermLabel} />
+          <input
+            className={fieldClass}
+            onChange={(event) => setPaymentTermLabel(event.target.value)}
+            value={paymentTermLabel}
+          />
         </Field>
         <Field label="Quantity">
-          <input className={fieldClass} min={1} onChange={(event) => setQuantity(Number(event.target.value))} type="number" value={quantity} />
+          <input
+            className={fieldClass}
+            min={1}
+            onChange={(event) => setQuantity(Number(event.target.value))}
+            type="number"
+            value={quantity}
+          />
         </Field>
         <Field label="Other Info">
-          <textarea className={fieldClass} onChange={(event) => setNotes(event.target.value)} rows={5} value={notes} />
+          <textarea
+            className={fieldClass}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={5}
+            value={notes}
+          />
         </Field>
         <div className="app-soft-panel p-5 md:col-span-2">
           <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">
             Estimated total with tax: {formatCurrency(unitPrice * quantity * 1.18)}
           </p>
-          <p className="mt-3 text-sm muted">Invoices are created after the quotation is confirmed and reaches its billing date.</p>
+          <p className="mt-3 text-sm muted">
+            Invoices are created after the quotation is confirmed and reaches its billing date.
+          </p>
         </div>
         {showContactForm ? (
           <div className="app-card grid gap-4 p-5 md:col-span-2 md:grid-cols-2">
             <Field label="Contact Name">
-              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, name: event.target.value }))} value={contactForm.name} />
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setContactForm((value) => ({ ...value, name: event.target.value }))
+                }
+                value={contactForm.name}
+              />
             </Field>
             <Field label="Phone">
-              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, phone: event.target.value }))} value={contactForm.phone} />
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setContactForm((value) => ({ ...value, phone: event.target.value }))
+                }
+                value={contactForm.phone}
+              />
             </Field>
             <Field label="Email">
-              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, email: event.target.value }))} value={contactForm.email} />
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setContactForm((value) => ({ ...value, email: event.target.value }))
+                }
+                value={contactForm.email}
+              />
             </Field>
             <Field label="Company">
-              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, companyName: event.target.value }))} value={contactForm.companyName} />
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setContactForm((value) => ({ ...value, companyName: event.target.value }))
+                }
+                value={contactForm.companyName}
+              />
             </Field>
             <Field label="Address">
-              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, line1: event.target.value }))} value={contactForm.line1} />
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setContactForm((value) => ({ ...value, line1: event.target.value }))
+                }
+                value={contactForm.line1}
+              />
             </Field>
             <Field label="City">
-              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, city: event.target.value }))} value={contactForm.city} />
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setContactForm((value) => ({ ...value, city: event.target.value }))
+                }
+                value={contactForm.city}
+              />
             </Field>
             <Field label="State">
-              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, state: event.target.value }))} value={contactForm.state} />
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setContactForm((value) => ({ ...value, state: event.target.value }))
+                }
+                value={contactForm.state}
+              />
             </Field>
             <Field label="Postal Code">
-              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, postalCode: event.target.value }))} value={contactForm.postalCode} />
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setContactForm((value) => ({ ...value, postalCode: event.target.value }))
+                }
+                value={contactForm.postalCode}
+              />
             </Field>
             <Field label="Country">
-              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, country: event.target.value }))} value={contactForm.country} />
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  setContactForm((value) => ({ ...value, country: event.target.value }))
+                }
+                value={contactForm.country}
+              />
             </Field>
-            <button className="app-btn app-btn-primary md:col-span-2 md:justify-self-start" onClick={() => createContactMutation.mutate()} type="button">
+            <button
+              className="app-btn app-btn-primary md:col-span-2 md:justify-self-start"
+              onClick={() => createContactMutation.mutate()}
+              type="button"
+            >
               Save Contact
             </button>
           </div>
