@@ -5,6 +5,7 @@ import {
   discountTypes,
   intervalUnits,
   productTypes,
+  taxComputations,
   userRoles,
 } from './enums.js';
 
@@ -116,18 +117,24 @@ export const productRecurringPriceSchema = z.object({
   recurringPlanId: z.string().uuid().optional(),
   planName: z.string().trim().min(1, 'Plan name is required').max(120),
   price: z.number().nonnegative(),
+  intervalCount: z.number().int().min(1).default(1),
   billingPeriod: z.enum(intervalUnits),
   minimumQuantity: z.number().int().min(1),
-  startDate: z.coerce.date(),
+  startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
   autoCloseEnabled: z.boolean().default(false),
+  autoCloseAfterCount: z.number().int().min(1).optional(),
+  autoCloseAfterUnit: z.enum(intervalUnits).optional(),
   isClosable: z.boolean().default(true),
   isPausable: z.boolean().default(true),
   isRenewable: z.boolean().default(true),
   isActive: z.boolean().default(true),
-}).refine((input) => !input.endDate || input.endDate >= input.startDate, {
+}).refine((input) => !input.endDate || !input.startDate || input.endDate >= input.startDate, {
   message: 'End date cannot be before start date',
   path: ['endDate'],
+}).refine((input) => !input.autoCloseEnabled || (input.autoCloseAfterCount && input.autoCloseAfterUnit), {
+  message: 'Auto-close duration is required when auto-close is enabled',
+  path: ['autoCloseAfterCount'],
 });
 
 export const productVariantSchema = z.object({
@@ -151,6 +158,7 @@ export const adminProductSchema = z.object({
   media: z.array(productMediaSchema).min(1, 'At least 1 media file is required').max(7, 'Maximum 7 media files allowed'),
   recurringPrices: z.array(productRecurringPriceSchema).max(20).default([]),
   variants: z.array(productVariantSchema).max(50).default([]),
+  taxRuleIds: z.array(z.string().uuid()).max(20).default([]),
 }).superRefine((input, context) => {
   const primaryCount = input.media.filter((entry) => entry.isPrimary).length;
   if (primaryCount > 1) {
@@ -202,12 +210,20 @@ export const recurringPlanSchema = z.object({
   intervalUnit: z.enum(intervalUnits),
   price: z.number().nonnegative(),
   minimumQuantity: z.number().int().min(1).default(1),
+  startDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
   autoCloseEnabled: z.boolean().default(false),
   autoCloseAfterCount: z.number().int().min(1).optional(),
   autoCloseAfterUnit: z.enum(intervalUnits).optional(),
   isClosable: z.boolean().default(true),
   isPausable: z.boolean().default(true),
   isRenewable: z.boolean().default(true),
+}).refine((input) => !input.endDate || !input.startDate || input.endDate >= input.startDate, {
+  message: 'End date cannot be before start date',
+  path: ['endDate'],
+}).refine((input) => !input.autoCloseEnabled || (input.autoCloseAfterCount && input.autoCloseAfterUnit), {
+  message: 'Auto-close duration is required when auto-close is enabled',
+  path: ['autoCloseAfterCount'],
 });
 
 export const discountRuleSchema = z.object({
@@ -217,9 +233,29 @@ export const discountRuleSchema = z.object({
   value: z.number().nonnegative(),
   minimumPurchase: z.number().nonnegative().optional(),
   minimumQuantity: z.number().int().min(1).optional(),
+  startDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
   limitUsageEnabled: z.boolean().default(false),
   usageLimit: z.number().int().min(1).optional(),
   scopeType: z.enum(discountScopeTypes),
+  productIds: z.array(z.string().uuid()).max(100).optional(),
+}).refine((input) => !input.endDate || !input.startDate || input.endDate >= input.startDate, {
+  message: 'End date cannot be before start date',
+  path: ['endDate'],
+}).refine((input) => !input.limitUsageEnabled || input.usageLimit, {
+  message: 'Usage limit is required when limited usage is enabled',
+  path: ['usageLimit'],
+}).refine((input) => input.scopeType !== 'selected_products' || Boolean(input.productIds?.length), {
+  message: 'Select at least one product when the discount applies to selected products',
+  path: ['productIds'],
+});
+
+export const taxRuleSchema = z.object({
+  name: z.string().min(2).max(120),
+  taxType: z.string().min(2).max(60).default('gst'),
+  computation: z.enum(taxComputations),
+  amount: z.number().nonnegative(),
+  isInclusive: z.boolean().default(false),
 });
 
 export const createSubscriptionSchema = z.object({

@@ -3,7 +3,6 @@ import { Link, Outlet, useNavigate } from 'react-router-dom';
 import {
   ChevronDownIcon,
   BarChartIcon,
-  CalendarRepeatIcon,
   CubeIcon,
   GridIcon,
   HomeIcon,
@@ -11,8 +10,6 @@ import {
   FolderStackIcon,
   ReceiptIcon,
   RefreshCycleIcon,
-  TagPercentIcon,
-  PercentIcon,
   UsersIcon
 } from '../../components/icons';
 import { Shell } from '../../components/layout';
@@ -21,18 +18,25 @@ import { useSession } from '../../lib/session';
 export function AdminLayout() {
   const navigate = useNavigate();
   const { user, logout } = useSession();
+  const configurationItems = [
+    { label: 'Attribute', to: '/admin/attributes' },
+    { label: 'Recurring Plan', to: '/admin/recurring-plans' },
+    { label: 'Quotation Template', to: '/admin/quotation-templates' },
+    { label: 'Payment Term', to: '/admin/payment-terms' },
+    { label: 'Discount', to: '/admin/discounts' },
+    { label: 'Taxes', to: '/admin/taxes' }
+  ];
   const navigation = [
     { label: 'Dashboard', to: '/admin', icon: GridIcon, detail: 'KPIs and activity', end: true },
     { label: 'Subscriptions', to: '/admin/subscriptions', icon: RefreshCycleIcon, detail: 'Lifecycle controls' },
     ...(user?.role === 'admin' ? [{ label: 'Products', to: '/admin/products', icon: CubeIcon, detail: 'Catalog items' }] : []),
-    { label: 'Recurring Plans', to: '/admin/recurring-plans', icon: CalendarRepeatIcon, detail: 'Cadence and pricing' },
-    { label: 'Taxes', to: '/admin/taxes', icon: PercentIcon, detail: 'Rates and rules' },
-    { label: 'Discounts', to: '/admin/discounts', icon: TagPercentIcon, detail: 'Promo rules' },
+    ...(user?.role === 'admin'
+      ? [{ label: 'Configuration', to: '/admin/attributes', icon: FolderStackIcon, detail: 'Setup masters', children: configurationItems }]
+      : []),
     { label: 'Reports', to: '/admin/reports', icon: BarChartIcon, detail: 'Revenue visibility' },
     ...(user?.role === 'admin'
       ? [
-          { label: 'Users', to: '/admin/users', icon: UsersIcon, detail: 'Staff access control' },
-          { label: 'Contacts', to: '/admin/contacts', icon: UsersIcon, detail: 'Customer contact records' }
+          { label: 'People', to: '/admin/users', icon: UsersIcon, detail: 'Users and contact records' }
         ]
       : [])
   ];
@@ -59,12 +63,14 @@ export function AdminLayout() {
               <option value="">Jump to module</option>
               <option value="/admin/subscriptions">Subscriptions</option>
               {user?.role === 'admin' ? <option value="/admin/products">Products</option> : null}
-              <option value="/admin/recurring-plans">Recurring Plans</option>
-              <option value="/admin/taxes">Taxes</option>
-              <option value="/admin/discounts">Discounts</option>
+              {user?.role === 'admin' ? <option value="/admin/attributes">Attribute</option> : null}
+              {user?.role === 'admin' ? <option value="/admin/recurring-plans">Recurring Plan</option> : null}
+              {user?.role === 'admin' ? <option value="/admin/quotation-templates">Quotation Template</option> : null}
+              {user?.role === 'admin' ? <option value="/admin/payment-terms">Payment Term</option> : null}
+              {user?.role === 'admin' ? <option value="/admin/discounts">Discount</option> : null}
+              {user?.role === 'admin' ? <option value="/admin/taxes">Taxes</option> : null}
               <option value="/admin/reports">Reports</option>
-              {user?.role === 'admin' ? <option value="/admin/users">Users</option> : null}
-              {user?.role === 'admin' ? <option value="/admin/contacts">Contacts</option> : null}
+              {user?.role === 'admin' ? <option value="/admin/users">People</option> : null}
             </select>
           </div>
           <div className="flex flex-wrap items-center gap-2">

@@ -10,9 +10,12 @@ import {
   formatDate,
   type PaginatedResponse,
   type Product,
+  type ProductAttributeConfig,
   type ProductMedia,
   type ProductRecurringPrice,
   type ProductVariantDetail,
+  type RecurringPlan,
+  type TaxRule,
 } from '../../lib/api';
 import { useSession } from '../../lib/session';
 
@@ -39,6 +42,7 @@ type ProductFormState = {
   media: ProductMedia[];
   recurringPrices: Array<ProductRecurringPrice & { startDate: string; endDate: string }>;
   variants: ProductVariantDetail[];
+  taxRuleIds: string[];
 };
 
 const emptyProductForm = (): ProductFormState => ({
@@ -52,6 +56,7 @@ const emptyProductForm = (): ProductFormState => ({
   media: [],
   recurringPrices: [],
   variants: [],
+  taxRuleIds: [],
 });
 
 export function ProductListPage() {
@@ -237,7 +242,7 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'view' | 'edit' }) 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { token } = useSession();
-  const [activeTab, setActiveTab] = useState<'media' | 'recurring' | 'variants'>('media');
+  const [activeTab, setActiveTab] = useState<'media' | 'recurring' | 'variants' | 'taxes'>('media');
   const [form, setForm] = useState<ProductFormState>(emptyProductForm);
   const [error, setError] = useState<string | null>(null);
   const [sectionErrors, setSectionErrors] = useState<string[]>([]);
@@ -247,6 +252,21 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'view' | 'edit' }) 
     queryKey: ['admin-product-detail', id],
     queryFn: () => apiRequest<Product>(`/admin/products/${id}`, { token }),
     enabled: Boolean(id && mode !== 'create')
+  });
+
+  const recurringPlansQuery = useQuery({
+    queryKey: ['admin-product-recurring-plans'],
+    queryFn: () => apiRequest<RecurringPlan[]>('/recurring-plans', { token })
+  });
+
+  const attributesQuery = useQuery({
+    queryKey: ['admin-product-attributes'],
+    queryFn: () => apiRequest<ProductAttributeConfig[]>('/attributes', { token })
+  });
+
+  const taxesQuery = useQuery({
+    queryKey: ['admin-product-taxes'],
+    queryFn: () => apiRequest<TaxRule[]>('/taxes', { token })
   });
 
   useEffect(() => {
@@ -272,6 +292,7 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'view' | 'edit' }) 
         endDate: entry.endDate ? entry.endDate.slice(0, 10) : '',
       })),
       variants: (productQuery.data.variants as ProductVariantDetail[] | undefined) ?? [],
+      taxRuleIds: productQuery.data.taxRuleIds ?? [],
     });
   }, [productQuery.data]);
 
@@ -303,11 +324,14 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'view' | 'edit' }) 
           recurringPlanId: entry.recurringPlanId,
           planName: entry.planName.trim(),
           price: Number(entry.price),
+          intervalCount: entry.intervalCount,
           billingPeriod: entry.billingPeriod,
           minimumQuantity: Number(entry.minimumQuantity),
-          startDate: entry.startDate,
+          startDate: entry.startDate || undefined,
           endDate: entry.endDate || undefined,
           autoCloseEnabled: entry.autoCloseEnabled,
+          autoCloseAfterCount: entry.autoCloseEnabled ? entry.autoCloseAfterCount ?? undefined : undefined,
+          autoCloseAfterUnit: entry.autoCloseEnabled ? entry.autoCloseAfterUnit ?? undefined : undefined,
           isClosable: entry.isClosable,
           isPausable: entry.isPausable,
           isRenewable: entry.isRenewable,
@@ -320,7 +344,8 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'view' | 'edit' }) 
           extraPrice: Number(entry.extraPrice),
           sortOrder: index,
           isActive: entry.isActive
-        }))
+        })),
+        taxRuleIds: form.taxRuleIds
       };
 
       const result = await apiRequest<Product>(mode === 'edit' ? `/admin/products/${id}` : '/admin/products', {
@@ -486,14 +511,20 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'view' | 'edit' }) 
         </label>
       </div>
       <div className="mt-6 flex flex-wrap gap-2">
-        {(['media', 'recurring', 'variants'] as const).map((tab) => (
+        {(['media', 'recurring', 'variants', 'taxes'] as const).map((tab) => (
           <button
             className={`rounded-full px-4 py-2 text-sm font-semibold ${activeTab === tab ? 'bg-white text-slate-950' : 'border border-white/10 bg-white/6 text-white'}`}
             key={tab}
             onClick={() => setActiveTab(tab)}
             type="button"
           >
-            {tab === 'media' ? `Media (${form.media.length})` : tab === 'recurring' ? `Recurring Prices (${form.recurringPrices.length})` : `Variants (${form.variants.length})`}
+            {tab === 'media'
+              ? `Media (${form.media.length})`
+              : tab === 'recurring'
+                ? `Recurring Plans (${form.recurringPrices.length})`
+                : tab === 'variants'
+                  ? `Variants (${form.variants.length})`
+                  : `Taxes (${form.taxRuleIds.length})`}
           </button>
         ))}
       </div>
@@ -549,63 +580,74 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'view' | 'edit' }) 
       ) : null}
 
       {activeTab === 'recurring' ? (
-        <ChildTable
-          title="Recurring Prices"
-          onAdd={!readOnly ? () => setForm((value) => ({
-            ...value,
-            recurringPrices: [
-              ...value.recurringPrices,
-              {
-                planName: '',
-                price: 0,
-                billingPeriod: 'month',
-                minimumQuantity: 1,
-                startDate: '',
-                endDate: '',
-                autoCloseEnabled: false,
-                isClosable: true,
-                isPausable: true,
-                isRenewable: true,
-                isActive: true
-              }
-            ]
-          })) : undefined}
-        >
+        <ChildTable title="Recurring Plans">
           <div className="grid gap-4">
-            {form.recurringPrices.map((entry, index) => (
-              <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4 md:grid-cols-3" key={`${entry.recurringPlanId ?? 'new'}-${index}`}>
-                <Field label="Plan Name"><input className={fieldClass} disabled={readOnly} onChange={(event) => updateRecurringRow(setForm, index, 'planName', event.target.value)} value={entry.planName} /></Field>
-                <Field label="Price"><input className={fieldClass} disabled={readOnly} min="0" onChange={(event) => updateRecurringRow(setForm, index, 'price', Number(event.target.value))} type="number" value={String(entry.price)} /></Field>
-                <Field label="Billing Period">
-                  <select className={fieldClass} disabled={readOnly} onChange={(event) => updateRecurringRow(setForm, index, 'billingPeriod', event.target.value)} value={entry.billingPeriod}>
-                    <option value="day">Daily</option>
-                    <option value="week">Weekly</option>
-                    <option value="month">Monthly</option>
-                    <option value="year">Yearly</option>
-                  </select>
-                </Field>
-                <Field label="Minimum Quantity"><input className={fieldClass} disabled={readOnly} min="1" onChange={(event) => updateRecurringRow(setForm, index, 'minimumQuantity', Number(event.target.value))} type="number" value={String(entry.minimumQuantity)} /></Field>
-                <Field label="Start Date"><input className={fieldClass} disabled={readOnly} onChange={(event) => updateRecurringRow(setForm, index, 'startDate', event.target.value)} type="date" value={entry.startDate} /></Field>
-                <Field label="End Date"><input className={fieldClass} disabled={readOnly} onChange={(event) => updateRecurringRow(setForm, index, 'endDate', event.target.value)} type="date" value={entry.endDate} /></Field>
-                <ToggleRow
-                  disabled={readOnly}
-                  items={[
-                    { label: 'Auto-close', checked: entry.autoCloseEnabled, key: 'autoCloseEnabled' },
-                    { label: 'Closable', checked: entry.isClosable, key: 'isClosable' },
-                    { label: 'Pausable', checked: entry.isPausable, key: 'isPausable' },
-                    { label: 'Renewable', checked: entry.isRenewable, key: 'isRenewable' },
-                    { label: 'Active', checked: entry.isActive, key: 'isActive' },
-                  ]}
-                  onToggle={(key, checked) => updateRecurringRow(setForm, index, key, checked)}
-                />
-                {!readOnly ? (
-                  <button className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-200 md:self-end" onClick={() => removeRecurringRow(setForm, index)} type="button">
-                    Remove Row
-                  </button>
-                ) : null}
-              </div>
-            ))}
-            {form.recurringPrices.length === 0 ? <p className="text-sm text-slate-400">No recurring prices configured.</p> : null}
+            {(recurringPlansQuery.data ?? []).map((plan) => {
+              const selectedIndex = form.recurringPrices.findIndex((entry) => entry.recurringPlanId === plan.id);
+              const selectedRow = selectedIndex >= 0 ? form.recurringPrices[selectedIndex] : null;
+
+              return (
+                <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-4" key={plan.id}>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <label className="flex items-start gap-3">
+                      <input
+                        checked={Boolean(selectedRow)}
+                        disabled={readOnly}
+                        onChange={(event) => toggleRecurringPlan(setForm, plan, event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>
+                        <span className="block font-semibold text-white">{plan.name}</span>
+                        <span className="text-sm text-slate-400">
+                          Every {plan.intervalCount} {plan.intervalUnit}(s) | Min qty {plan.minimumQuantity}
+                        </span>
+                        <span className="mt-1 block text-xs text-slate-500">
+                          {[
+                            plan.isClosable ? 'Closable' : 'Not closable',
+                            plan.isPausable ? 'Pausable' : 'Not pausable',
+                            plan.isRenewable ? 'Renewable' : 'Not renewable'
+                          ].join(' | ')}
+                        </span>
+                      </span>
+                    </label>
+                    <div className="text-sm text-slate-300">
+                      <p>{formatCurrency(plan.price)}</p>
+                      <p className="text-xs text-slate-500">
+                        {plan.autoCloseEnabled && plan.autoCloseAfterCount && plan.autoCloseAfterUnit
+                          ? `Auto-close after ${plan.autoCloseAfterCount} ${plan.autoCloseAfterUnit}(s)`
+                          : 'No auto-close'}
+                      </p>
+                    </div>
+                  </div>
+                  {selectedRow ? (
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <Field label="Override price">
+                        <input
+                          className={fieldClass}
+                          disabled={readOnly}
+                          min="0"
+                          onChange={(event) => updateRecurringRow(setForm, selectedIndex, 'price', Number(event.target.value))}
+                          type="number"
+                          value={String(selectedRow.price)}
+                        />
+                      </Field>
+                      <Field label="Plan window">
+                        <input
+                          className={fieldClass}
+                          disabled
+                          value={
+                            plan.startDate || plan.endDate
+                              ? `${formatDate(plan.startDate ?? null)} to ${formatDate(plan.endDate ?? null)}`
+                              : 'Always available'
+                          }
+                        />
+                      </Field>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+            {(recurringPlansQuery.data ?? []).length === 0 ? <p className="text-sm text-slate-400">Create recurring plans first from configuration.</p> : null}
           </div>
         </ChildTable>
       ) : null}
@@ -617,22 +659,46 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'view' | 'edit' }) 
             ...value,
             variants: [
               ...value.variants,
-              {
-                attribute: '',
-                value: '',
-                extraPrice: 0,
-                sortOrder: value.variants.length,
-                isActive: true
-              }
+              createVariantDraft(attributesQuery.data ?? [], value.variants.length)
             ]
           })) : undefined}
         >
           <div className="grid gap-4">
             {form.variants.map((entry, index) => (
               <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4 md:grid-cols-4" key={`${entry.id ?? 'new'}-${index}`}>
-                <Field label="Attribute"><input className={fieldClass} disabled={readOnly} onChange={(event) => updateVariantRow(setForm, index, 'attribute', event.target.value)} value={entry.attribute} /></Field>
-                <Field label="Value"><input className={fieldClass} disabled={readOnly} onChange={(event) => updateVariantRow(setForm, index, 'value', event.target.value)} value={entry.value} /></Field>
-                <Field label="Extra Price"><input className={fieldClass} disabled={readOnly} min="0" onChange={(event) => updateVariantRow(setForm, index, 'extraPrice', Number(event.target.value))} type="number" value={String(entry.extraPrice)} /></Field>
+                <Field label="Attribute">
+                  <select
+                    className={fieldClass}
+                    disabled={readOnly}
+                    onChange={(event) => updateVariantSelection(setForm, attributesQuery.data ?? [], index, event.target.value, undefined)}
+                    value={entry.attribute}
+                  >
+                    <option value="">Select attribute</option>
+                    {(attributesQuery.data ?? []).map((attribute) => (
+                      <option key={attribute.id} value={attribute.name}>
+                        {attribute.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Value">
+                  <select
+                    className={fieldClass}
+                    disabled={readOnly}
+                    onChange={(event) => updateVariantSelection(setForm, attributesQuery.data ?? [], index, entry.attribute, event.target.value)}
+                    value={entry.value}
+                  >
+                    <option value="">Select value</option>
+                    {findAttributeValues(attributesQuery.data ?? [], entry.attribute).map((value) => (
+                      <option key={value.id} value={value.value}>
+                        {value.value}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Default extra price">
+                  <input className={fieldClass} disabled min="0" type="number" value={String(entry.extraPrice)} />
+                </Field>
                 <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3 text-sm text-slate-200">
                   <input checked={entry.isActive} disabled={readOnly} onChange={(event) => updateVariantRow(setForm, index, 'isActive', event.target.checked)} type="checkbox" />
                   Active
@@ -645,6 +711,38 @@ export function ProductFormPage({ mode }: { mode: 'create' | 'view' | 'edit' }) 
               </div>
             ))}
             {form.variants.length === 0 ? <p className="text-sm text-slate-400">No variants configured.</p> : null}
+            {(attributesQuery.data ?? []).length === 0 ? <p className="text-sm text-slate-400">Create attributes and values first from configuration.</p> : null}
+          </div>
+        </ChildTable>
+      ) : null}
+
+      {activeTab === 'taxes' ? (
+        <ChildTable title="Taxes">
+          <div className="grid gap-3">
+            {(taxesQuery.data ?? []).map((taxRule) => (
+              <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-950/30 px-4 py-3 text-sm text-slate-200" key={taxRule.id}>
+                <input
+                  checked={form.taxRuleIds.includes(taxRule.id)}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      taxRuleIds: event.target.checked
+                        ? [...current.taxRuleIds, taxRule.id]
+                        : current.taxRuleIds.filter((entry) => entry !== taxRule.id)
+                    }))
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block font-semibold text-white">{taxRule.name}</span>
+                  <span className="text-xs text-slate-400">
+                    {taxRule.computation === 'fixed' ? formatCurrency(taxRule.amount ?? taxRule.ratePercent) : `${taxRule.amount ?? taxRule.ratePercent}%`} | {taxRule.taxType}
+                  </span>
+                </span>
+              </label>
+            ))}
+            {(taxesQuery.data ?? []).length === 0 ? <p className="text-sm text-slate-400">Create tax rules first from configuration.</p> : null}
           </div>
         </ChildTable>
       ) : null}
@@ -757,10 +855,8 @@ function validateProductForm(form: ProductFormState) {
   const recurringKeys = new Set<string>();
   form.recurringPrices.forEach((entry) => {
     if (!entry.planName.trim()) issues.push('Recurring price plan name is required');
-    if (!entry.startDate) issues.push('Recurring price start date is required');
     if (Number(entry.minimumQuantity) < 1) issues.push('Minimum quantity must be at least 1');
-    if (entry.endDate && entry.startDate && entry.endDate < entry.startDate) issues.push('End date cannot be before start date');
-    const key = `${entry.planName.trim().toLowerCase()}|${entry.billingPeriod}|${entry.startDate}|${entry.endDate || 'open'}`;
+    const key = `${entry.recurringPlanId ?? entry.planName.trim().toLowerCase()}|${entry.billingPeriod}`;
     if (recurringKeys.has(key)) issues.push('Duplicate recurring pricing row not allowed');
     recurringKeys.add(key);
   });
@@ -776,6 +872,97 @@ function validateProductForm(form: ProductFormState) {
   });
 
   return [...new Set(issues)];
+}
+
+function createVariantDraft(attributes: ProductAttributeConfig[], sortOrder: number): ProductVariantDetail {
+  const attribute = attributes[0];
+  const value = attribute?.values[0];
+
+  return {
+    attribute: attribute?.name ?? '',
+    attributeId: attribute?.id ?? null,
+    attributeValueId: value?.id ?? null,
+    value: value?.value ?? '',
+    extraPrice: Number(value?.extraPrice ?? 0),
+    sortOrder,
+    isActive: true
+  };
+}
+
+function findAttributeValues(attributes: ProductAttributeConfig[], attributeName: string) {
+  return attributes.find((attribute) => attribute.name === attributeName)?.values ?? [];
+}
+
+function updateVariantSelection(
+  setForm: React.Dispatch<React.SetStateAction<ProductFormState>>,
+  attributes: ProductAttributeConfig[],
+  index: number,
+  attributeName: string,
+  valueName?: string
+) {
+  setForm((current) => ({
+    ...current,
+    variants: current.variants.map((entry, entryIndex) => {
+      if (entryIndex !== index) {
+        return entry;
+      }
+
+      const attribute = attributes.find((item) => item.name === attributeName);
+      const selectedValue = attribute?.values.find((item) => item.value === (valueName ?? entry.value)) ?? attribute?.values[0];
+
+      return {
+        ...entry,
+        attribute: attribute?.name ?? '',
+        attributeId: attribute?.id ?? null,
+        attributeValueId: selectedValue?.id ?? null,
+        value: selectedValue?.value ?? '',
+        extraPrice: Number(selectedValue?.extraPrice ?? 0)
+      };
+    })
+  }));
+}
+
+function toggleRecurringPlan(
+  setForm: React.Dispatch<React.SetStateAction<ProductFormState>>,
+  plan: RecurringPlan,
+  checked: boolean
+) {
+  setForm((current) => {
+    if (checked) {
+      if (current.recurringPrices.some((entry) => entry.recurringPlanId === plan.id)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        recurringPrices: [
+          ...current.recurringPrices,
+          {
+            recurringPlanId: plan.id,
+            planName: plan.name,
+            price: Number(plan.price),
+            intervalCount: plan.intervalCount,
+            billingPeriod: plan.intervalUnit,
+            minimumQuantity: plan.minimumQuantity,
+            startDate: plan.startDate ? plan.startDate.slice(0, 10) : '',
+            endDate: plan.endDate ? plan.endDate.slice(0, 10) : '',
+            autoCloseEnabled: Boolean(plan.autoCloseEnabled),
+            autoCloseAfterCount: plan.autoCloseAfterCount ?? null,
+            autoCloseAfterUnit: plan.autoCloseAfterUnit ?? null,
+            isClosable: plan.isClosable,
+            isPausable: plan.isPausable,
+            isRenewable: plan.isRenewable,
+            isActive: plan.isActive ?? true
+          }
+        ]
+      };
+    }
+
+    return {
+      ...current,
+      recurringPrices: current.recurringPrices.filter((entry) => entry.recurringPlanId !== plan.id)
+    };
+  });
 }
 
 function updateRecurringRow(

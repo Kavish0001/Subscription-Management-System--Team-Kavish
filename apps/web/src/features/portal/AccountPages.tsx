@@ -427,7 +427,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
   });
 
   const workflowMutation = useMutation({
-    mutationFn: async (action: 'confirm' | 'renew' | 'upsell' | 'close') => {
+    mutationFn: async (action: 'confirm' | 'renew' | 'upsell' | 'close' | 'pause' | 'resume') => {
       if (!id) {
         throw new ApiError('Subscription not found', 404);
       }
@@ -444,10 +444,14 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
         action === 'confirm'
           ? 'Quotation confirmed.'
           : action === 'close'
-          ? 'Subscription closed.'
-          : action === 'renew'
-            ? `Renewal created: ${result.subscriptionNumber}`
-            : `Upsell created: ${result.subscriptionNumber}`
+            ? 'Subscription closed.'
+            : action === 'pause'
+              ? 'Subscription paused.'
+              : action === 'resume'
+                ? 'Subscription resumed.'
+                : action === 'renew'
+                  ? `Renewal created: ${result.subscriptionNumber}`
+                  : `Upsell created: ${result.subscriptionNumber}`
       );
 
       await Promise.all([
@@ -471,9 +475,20 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
 
   const subscription = subscriptionQuery.data;
   const canConfirm = mode === 'detail' && ['draft', 'quotation', 'quotation_sent'].includes(subscription?.status ?? '');
-  const canRenew = mode === 'detail' && ['confirmed', 'in_progress', 'closed'].includes(subscription?.status ?? '');
+  const canRenew =
+    mode === 'detail' &&
+    ['confirmed', 'in_progress', 'closed'].includes(subscription?.status ?? '') &&
+    Boolean(subscription?.recurringPlan?.isRenewable);
   const canUpsell = mode === 'detail' && ['confirmed', 'in_progress', 'closed'].includes(subscription?.status ?? '');
-  const canClose = mode === 'detail' && ['confirmed', 'in_progress'].includes(subscription?.status ?? '');
+  const canClose =
+    mode === 'detail' &&
+    ['confirmed', 'in_progress'].includes(subscription?.status ?? '') &&
+    Boolean(subscription?.recurringPlan?.isClosable);
+  const canPause =
+    mode === 'detail' &&
+    ['confirmed', 'in_progress'].includes(subscription?.status ?? '') &&
+    Boolean(subscription?.recurringPlan?.isPausable);
+  const canResume = mode === 'detail' && subscription?.status === 'paused' && Boolean(subscription?.recurringPlan?.isPausable);
   const shouldPrint = mode === 'detail' && searchParams.get('print') === '1';
   const historyItems = useMemo(
     () =>
@@ -533,6 +548,16 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
                 Close
               </button>
             ) : null}
+            {canPause ? (
+              <button className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white" onClick={() => workflowMutation.mutate('pause')} type="button">
+                Pause
+              </button>
+            ) : null}
+            {canResume ? (
+              <button className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white" onClick={() => workflowMutation.mutate('resume')} type="button">
+                Resume
+              </button>
+            ) : null}
           </div>
         ) : null
       }
@@ -562,7 +587,10 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
               <tbody>
                 {subscription.lines.map((line) => (
                   <tr className="border-t border-white/10 text-slate-100" key={line.id}>
-                    <td className="px-4 py-3">{line.productNameSnapshot}</td>
+                    <td className="px-4 py-3">
+                      <p>{line.productNameSnapshot}</p>
+                      {line.variant?.name ? <p className="text-xs text-slate-400">{line.variant.name}</p> : null}
+                    </td>
                     <td className="px-4 py-3">{line.quantity}</td>
                     <td className="px-4 py-3">{formatCurrency(line.unitPrice)}</td>
                     <td className="px-4 py-3">{formatCurrency(line.lineTotal)}</td>
@@ -586,10 +614,13 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
             <div className="mt-4 grid gap-3 text-sm text-slate-300">
               <SummaryRow label="Source" value={subscription.sourceChannel} />
               <SummaryRow label="Quotation Date" value={formatDate(subscription.quotationDate)} />
+              <SummaryRow label="Quotation Expires" value={formatDate(subscription.quotationExpiresAt)} />
               <SummaryRow label="Start Date" value={formatDate(subscription.startDate)} />
               <SummaryRow label="Next Invoice" value={formatDate(subscription.nextInvoiceDate)} />
+              <SummaryRow label="Expiration Date" value={formatDate(subscription.expirationDate)} />
               <SummaryRow label="Payment Term" value={subscription.paymentTermLabel ?? 'Standard'} />
               <SummaryRow label="Untaxed Amount" value={formatCurrency(subscription.subtotalAmount)} />
+              <SummaryRow label="Discount" value={formatCurrency(subscription.discountAmount)} />
               <SummaryRow label="Tax" value={formatCurrency(subscription.taxAmount)} />
               <SummaryRow label="Total" value={formatCurrency(subscription.totalAmount)} />
             </div>

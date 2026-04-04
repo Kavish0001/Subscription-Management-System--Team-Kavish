@@ -42,16 +42,17 @@ export function CartPage() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="grid gap-4">
             {items.map((item) => (
-              <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5" key={`${item.productId}-${item.recurringPlanId}`}>
+              <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5" key={`${item.productId}-${item.recurringPlanId}-${item.variantId ?? 'base'}`}>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <p className="break-words text-xl font-semibold text-white">{item.name}</p>
                     <p className="mt-1 text-sm text-slate-400">{item.recurringPlanName}</p>
+                    {item.variantName ? <p className="mt-1 text-sm text-slate-500">{item.variantName}</p> : null}
                     <p className="mt-3 text-sm text-slate-300">{formatCurrency(item.unitPrice)} each</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-                    <input className={`${fieldClass} w-24`} min={1} onChange={(event) => updateQuantity(item.productId, item.recurringPlanId, Number(event.target.value))} type="number" value={item.quantity} />
-                    <button className="rounded-full border border-white/10 px-4 py-3 text-sm text-white" onClick={() => removeItem(item.productId, item.recurringPlanId)} type="button">
+                    <input className={`${fieldClass} w-24`} min={1} onChange={(event) => updateQuantity(item.productId, item.recurringPlanId, Number(event.target.value), item.variantId ?? null)} type="number" value={item.quantity} />
+                    <button className="rounded-full border border-white/10 px-4 py-3 text-sm text-white" onClick={() => removeItem(item.productId, item.recurringPlanId, item.variantId ?? null)} type="button">
                       Remove
                     </button>
                   </div>
@@ -66,7 +67,7 @@ export function CartPage() {
                 <input className={`${fieldClass} min-w-0 flex-1`} onChange={(event) => setCodeInput(event.target.value)} value={codeInput} />
                 <button
                   className="rounded-full bg-white/10 px-4 py-3 text-sm font-semibold text-white"
-                  onClick={() => setDiscountMessage(applyDiscount(codeInput) ? 'Discount applied.' : 'Invalid code.')}
+                  onClick={() => setDiscountMessage(applyDiscount(codeInput) ? 'Discount code saved. Eligibility and totals will be checked during payment.' : 'Enter a discount code first.')}
                   type="button"
                 >
                   Apply
@@ -186,6 +187,7 @@ export function CheckoutPaymentPage() {
           lines: items.map((item) => ({
             productId: item.productId,
             recurringPlanId: item.recurringPlanId,
+            variantId: item.variantId,
             quantity: item.quantity
           }))
         })
@@ -267,20 +269,15 @@ export function CheckoutSuccessPage() {
 
 function SummaryCard({ actions }: { actions?: React.ReactNode }) {
   const items = useCartStore((state) => state.items);
-  const discountPercent = useCartStore((state) => state.discountPercent);
+  const discountCode = useCartStore((state) => state.discountCode);
   const subtotal = cartSubtotal(items);
-  const discountAmount = subtotal * (discountPercent / 100);
-  const taxableAmount = subtotal - discountAmount;
-  const taxAmount = taxableAmount * 0.18;
-  const total = taxableAmount + taxAmount;
 
   return (
     <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5 xl:sticky xl:top-8 xl:self-start">
       <div className="grid gap-2 text-slate-200">
         <p>Subtotal: {formatCurrency(subtotal)}</p>
-        <p>Discount: {formatCurrency(discountAmount)}</p>
-        <p>Tax: {formatCurrency(taxAmount)}</p>
-        <p className="text-lg font-semibold">Total: {formatCurrency(total)}</p>
+        <p>Discount code: {discountCode || 'None'}</p>
+        <p>Tax and discount totals are calculated from product tax rules and discount rules during payment.</p>
       </div>
       <div className="mt-5">{actions}</div>
     </div>

@@ -69,6 +69,14 @@ export type ProductAttributeConfig = {
   description?: string | null;
   isActive: boolean;
   valuesCount: number;
+  values: Array<{
+    id: string;
+    value: string;
+    extraPrice: string | number;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }>;
   createdAt: string;
   updatedAt: string;
 };
@@ -90,12 +98,26 @@ export type QuotationTemplateConfig = {
   paymentTermLabel: string;
   description: string | null;
   isActive: boolean;
+  isLastForever: boolean;
+  durationCount: number | null;
+  durationUnit: 'day' | 'week' | 'month' | 'year' | null;
   recurringPlan: {
     id: string;
     name: string;
   } | null;
   linesCount: number;
   subscriptionsCount: number;
+  lines: Array<{
+    id: string;
+    productId: string;
+    productName: string;
+    productDescription: string | null;
+    variantId: string | null;
+    variantName: string | null;
+    quantity: number;
+    unitPrice: string | number;
+    sortOrder: number;
+  }>;
   createdAt: string;
   updatedAt: string;
 };
@@ -107,9 +129,20 @@ export type RecurringPlan = {
   intervalUnit: 'day' | 'week' | 'month' | 'year';
   price: string | number;
   minimumQuantity: number;
+  startDate?: string | null;
+  endDate?: string | null;
+  autoCloseEnabled?: boolean;
+  autoCloseAfterCount?: number | null;
+  autoCloseAfterUnit?: 'day' | 'week' | 'month' | 'year' | null;
   isClosable: boolean;
   isPausable: boolean;
   isRenewable: boolean;
+  isActive?: boolean;
+  productsCount?: number;
+  subscriptionsCount?: number;
+  templatesCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type ProductPlanPricing = {
@@ -134,11 +167,14 @@ export type ProductRecurringPrice = {
   recurringPlanId?: string;
   planName: string;
   price: string | number;
+  intervalCount: number;
   billingPeriod: 'day' | 'week' | 'month' | 'year';
   minimumQuantity: number;
   startDate: string | null;
   endDate: string | null;
   autoCloseEnabled: boolean;
+  autoCloseAfterCount?: number | null;
+  autoCloseAfterUnit?: 'day' | 'week' | 'month' | 'year' | null;
   isClosable: boolean;
   isPausable: boolean;
   isRenewable: boolean;
@@ -148,10 +184,19 @@ export type ProductRecurringPrice = {
 export type ProductVariantDetail = {
   id?: string;
   attribute: string;
+  attributeId?: string | null;
+  attributeValueId?: string | null;
   value: string;
   extraPrice: string | number;
   sortOrder: number;
   isActive: boolean;
+};
+
+export type ProductCategory = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
 };
 
 export type Product = {
@@ -177,12 +222,15 @@ export type Product = {
   mediaCount?: number;
   recurringPlansCount?: number;
   variantsCount?: number;
+  taxRulesCount?: number;
   recurringPrices?: ProductRecurringPrice[];
   variants?: ProductVariantDetail[] | Array<{
     id: string;
     name: string;
     priceOverride: string | number | null;
   }>;
+  taxRuleIds?: string[];
+  taxRules?: TaxRule[];
   planPricing: ProductPlanPricing[];
 };
 
@@ -194,19 +242,32 @@ export type Discount = {
   value: string | number;
   minimumPurchase: string | number | null;
   minimumQuantity: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  limitUsageEnabled: boolean;
+  usageLimit: number | null;
   scopeType: string;
   usageCount: number;
+  isActive?: boolean;
+  products?: Array<{
+    id: string;
+    name: string;
+  }>;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 export type TaxRule = {
   id: string;
   name: string;
+  computation: 'percentage' | 'fixed';
+  amount?: string | number;
   ratePercent: string | number;
   taxType: string;
   isInclusive: boolean;
+  isActive?: boolean;
   createdAt?: string;
-  computation?: 'percentage' | 'fixed';
+  updatedAt?: string;
 };
 
 export type SubscriptionLine = {
@@ -216,6 +277,10 @@ export type SubscriptionLine = {
   quantity: number;
   unitPrice: string | number;
   lineTotal: string | number;
+  variant?: {
+    id: string;
+    name: string;
+  } | null;
   product?: Product;
 };
 
@@ -237,12 +302,15 @@ export type Subscription = {
   relationType?: 'renewal' | 'upsell' | null;
   sourceChannel: string;
   quotationDate: string | null;
+  quotationExpiresAt?: string | null;
   confirmedAt: string | null;
   startDate: string | null;
   nextInvoiceDate: string | null;
+  expirationDate?: string | null;
   paymentTermLabel: string | null;
   totalAmount: string | number;
   subtotalAmount: string | number;
+  discountAmount: string | number;
   taxAmount: string | number;
   notes: string | null;
   customerContact: Contact;

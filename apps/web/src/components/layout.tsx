@@ -1,7 +1,7 @@
-import { useState, type ComponentType, type PropsWithChildren, type ReactNode } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { useEffect, useRef, useState, type ComponentType, type PropsWithChildren, type ReactNode } from 'react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 
-import { ArrowRightIcon, MenuIcon, XIcon } from './icons';
+import { ArrowRightIcon, ChevronDownIcon, MenuIcon, XIcon } from './icons';
 import { cn, formatStatusLabel, getStatusTone, type StatusTone } from '../lib/ui';
 
 type IconComponent = ComponentType<{ className?: string }>;
@@ -12,6 +12,10 @@ type NavigationItem = {
   icon?: IconComponent;
   detail?: string;
   end?: boolean;
+  children?: Array<{
+    label: string;
+    to: string;
+  }>;
 };
 
 export function Shell({
@@ -27,11 +31,41 @@ export function Shell({
   toolbar?: ReactNode;
 }>>) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const location = useLocation();
+  const navRef = useRef<HTMLElement | null>(null);
 
   // Close sidebar on navigation (mobile)
   const handleNavLinkClick = () => {
     setIsSidebarOpen(false);
+    setOpenMenu(null);
   };
+
+  useEffect(() => {
+    setOpenMenu(null);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!navRef.current?.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   return (
     <div className="app-shell">
@@ -74,9 +108,75 @@ export function Shell({
             className="mb-7"
             to="/"
           />
-          <nav className="grid gap-2">
+          <nav className="grid gap-2" ref={navRef}>
             {navigation.map((item) => {
               const Icon = item.icon;
+              const hasChildren = Boolean(item.children?.length);
+              const isChildActive = item.children?.some((child) => location.pathname.startsWith(child.to)) ?? false;
+
+              if (hasChildren) {
+                const isOpen = openMenu === item.label;
+
+                return (
+                  <div className="relative" key={item.label}>
+                    <button
+                      className={cn(
+                        'group w-full rounded-[20px] border px-4 py-3 text-left transition-all duration-150',
+                        isChildActive || isOpen
+                          ? 'border-[color:var(--color-primary)] bg-[linear-gradient(135deg,rgba(79,70,229,0.16),rgba(6,182,212,0.08))] shadow-[var(--shadow-lift)]'
+                          : 'border-transparent hover:border-[color:var(--color-border)] hover:bg-[color:color-mix(in_srgb,var(--color-card)_88%,transparent)]'
+                      )}
+                      onClick={() => setOpenMenu((value) => (value === item.label ? null : item.label))}
+                      type="button"
+                    >
+                      <div className="flex items-center gap-3">
+                        {Icon ? (
+                          <div
+                            className={cn(
+                              'grid h-11 w-11 shrink-0 place-items-center rounded-[18px] transition-colors',
+                              isChildActive || isOpen
+                                ? 'bg-[linear-gradient(135deg,var(--color-primary),var(--color-secondary))] text-white'
+                                : 'bg-[color:color-mix(in_srgb,var(--color-card)_86%,transparent)] text-[color:var(--color-text-secondary)]'
+                            )}
+                          >
+                            <Icon className="h-[18px] w-[18px]" />
+                          </div>
+                        ) : null}
+                        <div className="min-w-0 flex-1">
+                          <p className={cn('truncate font-semibold', (isChildActive || isOpen) && 'text-white')}>{item.label}</p>
+                        </div>
+                        <ChevronDownIcon
+                          className={cn(
+                            'h-4 w-4 transition-transform',
+                            isOpen ? 'rotate-180 text-white' : 'text-[color:var(--color-text-muted)]'
+                          )}
+                        />
+                      </div>
+                    </button>
+                    {isOpen ? (
+                      <div className="mt-2 grid gap-1 rounded-[20px] border border-[color:var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-card)_92%,transparent)] p-2">
+                        {item.children?.map((child) => (
+                          <NavLink
+                            className={({ isActive }) =>
+                              cn(
+                                'rounded-2xl px-4 py-3 text-sm font-medium transition-colors',
+                                isActive
+                                  ? 'bg-white/10 text-white'
+                                  : 'text-[color:var(--color-text-secondary)] hover:bg-white/5 hover:text-white'
+                              )
+                            }
+                            key={child.to}
+                            onClick={handleNavLinkClick}
+                            to={child.to}
+                          >
+                            {child.label}
+                          </NavLink>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              }
 
               return (
                 <NavLink

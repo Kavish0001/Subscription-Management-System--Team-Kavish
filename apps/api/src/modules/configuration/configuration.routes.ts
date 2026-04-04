@@ -10,8 +10,17 @@ export const configurationRouter = Router();
 configurationRouter.use(requireAuth);
 configurationRouter.use(requireRole('admin'));
 
+const recordIdSchema = z.string().uuid();
+
+const attributeValueSchema = z.object({
+  id: z.string().uuid().optional(),
+  value: z.string().trim().min(1).max(120),
+  extraPrice: z.number().nonnegative().default(0)
+});
+
 const attributeSchema = z.object({
-  name: z.string().trim().min(1).max(120)
+  name: z.string().trim().min(1).max(120),
+  values: z.array(attributeValueSchema).max(100).default([])
 });
 
 const paymentTermSchema = z.object({
@@ -20,17 +29,46 @@ const paymentTermSchema = z.object({
   dueDays: z.number().int().min(0).max(3650).default(0)
 });
 
+const quotationTemplateLineSchema = z.object({
+  productId: z.string().uuid(),
+  variantId: z.string().uuid().nullable().optional(),
+  quantity: z.number().int().min(1),
+  unitPrice: z.number().nonnegative()
+});
+
 const quotationTemplateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   validityDays: z.number().int().min(1).max(3650),
   recurringPlanId: z.string().uuid().nullable().optional(),
+  isLastForever: z.boolean().default(false),
+  durationCount: z.number().int().min(1).nullable().optional(),
+  durationUnit: z.enum(['week', 'month', 'year']).nullable().optional(),
   paymentTermLabel: z.string().trim().min(1).max(120),
-  description: z.string().trim().max(2000).optional()
+  description: z.string().trim().max(2000).optional(),
+  lines: z.array(quotationTemplateLineSchema).max(50).default([])
+}).refine((input) => input.isLastForever || (input.durationCount && input.durationUnit), {
+  message: 'End-after duration is required when the template is not last forever',
+  path: ['durationCount']
 });
+
+function parseId(value: unknown, label: string) {
+  const parsed = recordIdSchema.safeParse(Array.isArray(value) ? value[0] : value);
+  if (!parsed.success) {
+    throw new AppError(`${label} is invalid`, 400, 'INVALID_ID');
+  }
+
+  return parsed.data;
+}
 
 configurationRouter.get('/attributes', async (_request, response) => {
   const attributes = await prisma.productAttribute.findMany({
     include: {
+      values: {
+        where: {
+          isActive: true
+        },
+        orderBy: [{ value: 'asc' }]
+      },
       _count: {
         select: {
           values: true
@@ -47,6 +85,14 @@ configurationRouter.get('/attributes', async (_request, response) => {
       description: entry.description,
       isActive: entry.isActive,
       valuesCount: entry._count.values,
+      values: entry.values.map((value) => ({
+        id: value.id,
+        value: value.value,
+        extraPrice: value.extraPrice,
+        isActive: value.isActive,
+        createdAt: value.createdAt,
+        updatedAt: value.updatedAt
+      })),
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt
     }))
@@ -63,29 +109,104 @@ configurationRouter.post('/attributes', async (request, response, next) => {
           equals: payload.name,
           mode: 'insensitive'
         }
+      },
+      include: {
+        values: true
       }
     });
 
-    if (existing) {
-      const attribute = await prisma.productAttribute.update({
-        where: { id: existing.id },
-        data: {
-          name: payload.name,
-          isActive: true
-        }
-      });
+    const attribute =
+      existing
+        ? await prisma.productAttribute.update({
+            where: { id: existing.id },
+            data: {
+              name: payload.name,
+              isActive: true
+            }
+          })
+        : await prisma.productAttribute.create({
+            data: {
+              name: payload.name,
+              isActive: true
+            }
+          });
 
-      return response.status(201).json({ data: attribute });
+    const existingValues = existing?.values ?? [];
+    const keepIds: string[] = [];
+
+    for (const value of payload.values) {
+      const matchingValue =
+        existingValues.find((entry) => value.id === entry.id) ??
+        existingValues.find((entry) => entry.value.toLowerCase() === value.value.toLowerCase());
+
+      const savedValue = matchingValue
+        ? await prisma.productAttributeValue.update({
+            where: { id: matchingValue.id },
+            data: {
+              value: value.value,
+              extraPrice: value.extraPrice,
+              isActive: true
+            }
+          })
+        : await prisma.productAttributeValue.create({
+            data: {
+              attributeId: attribute.id,
+              value: value.value,
+              extraPrice: value.extraPrice,
+              isActive: true
+            }
+          });
+
+      keepIds.push(savedValue.id);
     }
 
-    const attribute = await prisma.productAttribute.create({
-      data: {
-        name: payload.name,
-        isActive: true
+    if (existingValues.length) {
+      await prisma.productAttributeValue.updateMany({
+        where: {
+          attributeId: attribute.id,
+          ...(keepIds.length
+            ? {
+                id: {
+                  notIn: keepIds
+                }
+              }
+            : {})
+        },
+        data: {
+          isActive: false
+        }
+      });
+    }
+
+    const result = await prisma.productAttribute.findUniqueOrThrow({
+      where: { id: attribute.id },
+      include: {
+        values: {
+          where: {
+            isActive: true
+          },
+          orderBy: [{ value: 'asc' }]
+        },
+        _count: {
+          select: {
+            values: true
+          }
+        }
       }
     });
 
-    response.status(201).json({ data: attribute });
+    response.status(201).json({
+      data: {
+        id: result.id,
+        name: result.name,
+        description: result.description,
+        isActive: result.isActive,
+        valuesCount: result._count.values,
+        values: result.values,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -93,7 +214,7 @@ configurationRouter.post('/attributes', async (request, response, next) => {
 
 configurationRouter.delete('/attributes/:id', async (request, response, next) => {
   try {
-    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+    const id = parseId(request.params.id, 'Attribute');
     const existing = await prisma.productAttribute.findUnique({
       where: { id },
       select: { id: true }
@@ -103,12 +224,22 @@ configurationRouter.delete('/attributes/:id', async (request, response, next) =>
       throw new AppError('Attribute not found', 404, 'ATTRIBUTE_NOT_FOUND');
     }
 
-    await prisma.productAttribute.update({
-      where: { id },
-      data: {
-        isActive: false
-      }
-    });
+    await prisma.$transaction([
+      prisma.productAttribute.update({
+        where: { id },
+        data: {
+          isActive: false
+        }
+      }),
+      prisma.productAttributeValue.updateMany({
+        where: {
+          attributeId: id
+        },
+        data: {
+          isActive: false
+        }
+      })
+    ]);
 
     response.status(204).send();
   } catch (error) {
@@ -120,6 +251,24 @@ configurationRouter.get('/quotation-templates', async (_request, response) => {
   const templates = await prisma.quotationTemplate.findMany({
     include: {
       recurringPlan: true,
+      lines: {
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              description: true
+            }
+          },
+          variant: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        },
+        orderBy: [{ sortOrder: 'asc' }]
+      },
       _count: {
         select: {
           lines: true,
@@ -138,6 +287,9 @@ configurationRouter.get('/quotation-templates', async (_request, response) => {
       paymentTermLabel: entry.paymentTermLabel,
       description: entry.description,
       isActive: entry.isActive,
+      isLastForever: entry.isLastForever,
+      durationCount: entry.durationCount,
+      durationUnit: entry.durationUnit,
       recurringPlan: entry.recurringPlan
         ? {
             id: entry.recurringPlan.id,
@@ -146,6 +298,17 @@ configurationRouter.get('/quotation-templates', async (_request, response) => {
         : null,
       linesCount: entry._count.lines,
       subscriptionsCount: entry._count.subscriptions,
+      lines: entry.lines.map((line) => ({
+        id: line.id,
+        productId: line.productId,
+        productName: line.product.name,
+        productDescription: line.product.description,
+        variantId: line.variantId,
+        variantName: line.variant?.name ?? null,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        sortOrder: line.sortOrder
+      })),
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt
     }))
@@ -161,13 +324,79 @@ configurationRouter.post('/quotation-templates', async (request, response, next)
         name: payload.name,
         validityDays: payload.validityDays,
         recurringPlanId: payload.recurringPlanId ?? null,
+        isLastForever: payload.isLastForever,
+        durationCount: payload.isLastForever ? null : payload.durationCount ?? null,
+        durationUnit: payload.isLastForever ? null : payload.durationUnit ?? null,
         paymentTermLabel: payload.paymentTermLabel,
         description: payload.description || null,
-        isActive: true
+        isActive: true,
+        lines: payload.lines.length
+          ? {
+              create: payload.lines.map((line, index) => ({
+                productId: line.productId,
+                variantId: line.variantId ?? null,
+                quantity: line.quantity,
+                unitPrice: line.unitPrice,
+                sortOrder: index
+              }))
+            }
+          : undefined
+      },
+      include: {
+        recurringPlan: true,
+        lines: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                description: true
+              }
+            },
+            variant: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          },
+          orderBy: [{ sortOrder: 'asc' }]
+        }
       }
     });
 
-    response.status(201).json({ data: template });
+    response.status(201).json({
+      data: {
+        id: template.id,
+        name: template.name,
+        validityDays: template.validityDays,
+        paymentTermLabel: template.paymentTermLabel,
+        description: template.description,
+        isActive: template.isActive,
+        isLastForever: template.isLastForever,
+        durationCount: template.durationCount,
+        durationUnit: template.durationUnit,
+        recurringPlan: template.recurringPlan
+          ? {
+              id: template.recurringPlan.id,
+              name: template.recurringPlan.name
+            }
+          : null,
+        lines: template.lines.map((line) => ({
+          id: line.id,
+          productId: line.productId,
+          productName: line.product.name,
+          productDescription: line.product.description,
+          variantId: line.variantId,
+          variantName: line.variant?.name ?? null,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          sortOrder: line.sortOrder
+        })),
+        createdAt: template.createdAt,
+        updatedAt: template.updatedAt
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -175,7 +404,7 @@ configurationRouter.post('/quotation-templates', async (request, response, next)
 
 configurationRouter.delete('/quotation-templates/:id', async (request, response, next) => {
   try {
-    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+    const id = parseId(request.params.id, 'Quotation template');
     const existing = await prisma.quotationTemplate.findUnique({
       where: { id },
       select: { id: true }
@@ -219,28 +448,25 @@ configurationRouter.post('/payment-terms', async (request, response, next) => {
       }
     });
 
-    if (existing) {
-      const paymentTerm = await prisma.paymentTerm.update({
-        where: { id: existing.id },
-        data: {
-          name: payload.name,
-          description: payload.description || null,
-          dueDays: payload.dueDays,
-          isActive: true
-        }
-      });
-
-      return response.status(201).json({ data: paymentTerm });
-    }
-
-    const paymentTerm = await prisma.paymentTerm.create({
-      data: {
-        name: payload.name,
-        description: payload.description || null,
-        dueDays: payload.dueDays,
-        isActive: true
-      }
-    });
+    const paymentTerm =
+      existing
+        ? await prisma.paymentTerm.update({
+            where: { id: existing.id },
+            data: {
+              name: payload.name,
+              description: payload.description || null,
+              dueDays: payload.dueDays,
+              isActive: true
+            }
+          })
+        : await prisma.paymentTerm.create({
+            data: {
+              name: payload.name,
+              description: payload.description || null,
+              dueDays: payload.dueDays,
+              isActive: true
+            }
+          });
 
     response.status(201).json({ data: paymentTerm });
   } catch (error) {
@@ -250,7 +476,7 @@ configurationRouter.post('/payment-terms', async (request, response, next) => {
 
 configurationRouter.delete('/payment-terms/:id', async (request, response, next) => {
   try {
-    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+    const id = parseId(request.params.id, 'Payment term');
     const existing = await prisma.paymentTerm.findUnique({
       where: { id },
       select: { id: true }

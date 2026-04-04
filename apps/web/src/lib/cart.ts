@@ -8,6 +8,8 @@ export type CartItem = {
   imageUrl: string | null;
   recurringPlanId: string | null;
   recurringPlanName: string;
+  variantId?: string | null;
+  variantName?: string | null;
   unitPrice: number;
   quantity: number;
 };
@@ -17,8 +19,8 @@ type CartState = {
   discountCode: string;
   discountPercent: number;
   addItem: (item: CartItem) => void;
-  removeItem: (productId: string, recurringPlanId: string | null) => void;
-  updateQuantity: (productId: string, recurringPlanId: string | null, quantity: number) => void;
+  removeItem: (productId: string, recurringPlanId: string | null, variantId?: string | null) => void;
+  updateQuantity: (productId: string, recurringPlanId: string | null, quantity: number, variantId?: string | null) => void;
   applyDiscount: (code: string) => boolean;
   clearDiscount: () => void;
   clear: () => void;
@@ -34,7 +36,9 @@ export const useCartStore = create<CartState>()(
         set((state) => {
           const existing = state.items.find(
             (entry) =>
-              entry.productId === item.productId && entry.recurringPlanId === item.recurringPlanId
+              entry.productId === item.productId &&
+              entry.recurringPlanId === item.recurringPlanId &&
+              entry.variantId === item.variantId
           );
 
           if (!existing) {
@@ -44,6 +48,7 @@ export const useCartStore = create<CartState>()(
           return {
             items: state.items.map((entry) =>
               entry.productId === item.productId && entry.recurringPlanId === item.recurringPlanId
+              && entry.variantId === item.variantId
                 ? {
                     ...entry,
                     quantity: entry.quantity + item.quantity
@@ -52,18 +57,20 @@ export const useCartStore = create<CartState>()(
             )
           };
         }),
-      removeItem: (productId, recurringPlanId) =>
+      removeItem: (productId, recurringPlanId, variantId = null) =>
         set((state) => ({
           items: state.items.filter(
             (entry) =>
-              !(entry.productId === productId && entry.recurringPlanId === recurringPlanId)
+              !(entry.productId === productId && entry.recurringPlanId === recurringPlanId && (entry.variantId ?? null) === variantId)
           )
         })),
-      updateQuantity: (productId, recurringPlanId, quantity) =>
+      updateQuantity: (productId, recurringPlanId, quantity, variantId = null) =>
         set((state) => ({
           items: state.items
             .map((entry) =>
-              entry.productId === productId && entry.recurringPlanId === recurringPlanId
+              entry.productId === productId &&
+              entry.recurringPlanId === recurringPlanId &&
+              (entry.variantId ?? null) === variantId
                 ? { ...entry, quantity }
                 : entry
             )
@@ -71,11 +78,11 @@ export const useCartStore = create<CartState>()(
         })),
       applyDiscount: (code) => {
         const normalized = code.trim().toUpperCase();
-        const matched = normalized === 'WELCOME10';
+        const matched = normalized.length > 0;
 
         set({
           discountCode: matched ? normalized : '',
-          discountPercent: matched ? 10 : 0
+          discountPercent: 0
         });
 
         return matched;

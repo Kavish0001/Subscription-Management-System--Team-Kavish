@@ -1,19 +1,12 @@
 import { Prisma } from '@prisma/client';
+import { taxRuleSchema } from '@subscription/shared';
 import { Router } from 'express';
-import { z } from 'zod';
 
+import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 
 export const taxesRouter = Router();
-
-const taxRuleSchema = z.object({
-  name: z.string().min(2).max(120),
-  taxType: z.string().min(2).max(60).default('gst'),
-  computation: z.enum(['percentage', 'fixed']),
-  amount: z.number().nonnegative(),
-  isInclusive: z.boolean().default(false)
-});
 
 taxesRouter.use(requireAuth);
 
@@ -22,7 +15,12 @@ taxesRouter.get('/taxes', requireRole('admin', 'internal_user'), async (_request
     orderBy: { createdAt: 'desc' }
   });
 
-  response.json({ data: taxes });
+  response.json({
+    data: taxes.map((tax) => ({
+      ...tax,
+      amount: tax.ratePercent
+    }))
+  });
 });
 
 taxesRouter.post('/taxes', requireRole('admin'), async (request, response, next) => {
@@ -33,17 +31,44 @@ taxesRouter.post('/taxes', requireRole('admin'), async (request, response, next)
       data: {
         name: payload.name,
         taxType: payload.taxType,
+        computation: payload.computation,
         ratePercent: new Prisma.Decimal(payload.amount),
-        isInclusive: payload.isInclusive
+        isInclusive: payload.isInclusive,
+        isActive: true
       }
     });
 
     response.status(201).json({
       data: {
         ...taxRule,
-        computation: payload.computation
+        amount: taxRule.ratePercent
       }
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+taxesRouter.delete('/taxes/:id', requireRole('admin'), async (request, response, next) => {
+  try {
+    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+    const existing = await prisma.taxRule.findUnique({
+      where: { id },
+      select: { id: true }
+    });
+
+    if (!existing) {
+      throw new AppError('Tax rule not found', 404, 'TAX_RULE_NOT_FOUND');
+    }
+
+    await prisma.taxRule.update({
+      where: { id },
+      data: {
+        isActive: false
+      }
+    });
+
+    response.status(204).send();
   } catch (error) {
     next(error);
   }

@@ -5,7 +5,7 @@ import { Router, type Request } from 'express';
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middleware/auth.js';
-import { isInvoiceEligibleStatus, syncSubscriptionOperationalStatuses } from '../subscriptions/lifecycle.js';
+import { addInterval, isInvoiceEligibleStatus, resolveAutoCloseDate, syncSubscriptionOperationalStatuses } from '../subscriptions/lifecycle.js';
 import { buildSubscriptionPricing } from '../subscriptions/pricing.js';
 
 export const billingRouter = Router();
@@ -23,24 +23,11 @@ function assertInvoiceAccess(
 }
 
 function nextInvoiceDateFromPlan(date: Date, unit?: string | null, count = 1) {
-  const next = new Date(date);
-
-  switch (unit) {
-    case 'day':
-      next.setDate(next.getDate() + count);
-      break;
-    case 'week':
-      next.setDate(next.getDate() + 7 * count);
-      break;
-    case 'month':
-      next.setMonth(next.getMonth() + count);
-      break;
-    case 'year':
-      next.setFullYear(next.getFullYear() + count);
-      break;
+  if (!unit) {
+    return new Date(date);
   }
 
-  return next;
+  return addInterval(date, count, unit as 'day' | 'week' | 'month' | 'year');
 }
 
 billingRouter.get('/invoices', async (request, response) => {
@@ -181,6 +168,14 @@ billingRouter.post('/checkout/complete', requireRole('portal_user'), async (requ
               confirmedAt: now,
               startDate: now,
               nextInvoiceDate: now,
+              expirationDate: recurringPlan
+                ? resolveAutoCloseDate({
+                    startDate: now,
+                    autoCloseEnabled: recurringPlan.autoCloseEnabled,
+                    autoCloseAfterCount: recurringPlan.autoCloseAfterCount,
+                    autoCloseAfterUnit: recurringPlan.autoCloseAfterUnit
+                  })
+                : null,
               paymentTermLabel: 'Immediate payment',
               subtotalAmount: pricing.subtotalAmount,
               discountAmount: pricing.discountAmount,

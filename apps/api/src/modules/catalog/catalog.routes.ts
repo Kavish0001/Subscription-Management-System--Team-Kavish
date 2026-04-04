@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { DiscountScopeType, Prisma } from '@prisma/client';
 import {
   adminProductSchema,
   discountRuleSchema,
@@ -23,7 +23,11 @@ const truthyQuerySchema = z
 
 const productListQuerySchema = paginationSchema.extend({
   search: z.string().trim().optional(),
-  sortBy: z.enum(['newest', 'name', 'price']).default('newest')
+  sortBy: z.enum(['newest', 'name', 'price']).default('newest'),
+  categoryId: z.string().uuid().optional(),
+  productType: z.enum(['goods', 'service']).optional(),
+  minPrice: z.coerce.number().nonnegative().optional(),
+  maxPrice: z.coerce.number().nonnegative().optional()
 });
 
 const adminProductListQuerySchema = paginationSchema.extend({
@@ -59,10 +63,17 @@ const productAdminQuery = Prisma.validator<Prisma.ProductDefaultArgs>()({
       },
       orderBy: [{ createdAt: 'asc' }]
     },
+    productTaxRules: {
+      include: {
+        taxRule: true
+      },
+      orderBy: [{ createdAt: 'asc' }]
+    },
     _count: {
       select: {
         planPricing: true,
         variants: true,
+        productTaxRules: true,
         subscriptionLines: true,
         quotationTemplateLines: true
       }
@@ -131,6 +142,37 @@ function normalizeMedia(media: z.infer<typeof adminProductSchema>['media']) {
   };
 }
 
+function formatVariantDetails(product: AdminProduct) {
+  return product.variants.map((variant, index) => {
+    const linkedValue = variant.variantValues[0]?.attributeValue;
+    return {
+      id: variant.id,
+      attribute: linkedValue?.attribute.name ?? 'Variant',
+      attributeId: linkedValue?.attribute.id ?? null,
+      attributeValueId: linkedValue?.id ?? null,
+      value: linkedValue?.value ?? variant.name,
+      extraPrice: linkedValue?.extraPrice ?? variant.priceOverride ?? 0,
+      sortOrder: index,
+      isActive: variant.isActive
+    };
+  });
+}
+
+function formatTaxRules(product: AdminProduct) {
+  return product.productTaxRules.map((entry) => ({
+    id: entry.taxRule.id,
+    name: entry.taxRule.name,
+    computation: entry.taxRule.computation,
+    amount: entry.taxRule.ratePercent,
+    ratePercent: entry.taxRule.ratePercent,
+    taxType: entry.taxRule.taxType,
+    isInclusive: entry.taxRule.isInclusive,
+    isActive: entry.taxRule.isActive,
+    createdAt: entry.taxRule.createdAt,
+    updatedAt: entry.taxRule.updatedAt
+  }));
+}
+
 function formatAdminProduct(product: AdminProduct) {
   const media = (product.imageUrls ?? []).map((url, index) => ({
     id: `${product.id}-media-${index}`,
@@ -162,31 +204,50 @@ function formatAdminProduct(product: AdminProduct) {
     mediaCount: media.length,
     recurringPlansCount: product._count.planPricing,
     variantsCount: product._count.variants,
+    taxRulesCount: product._count.productTaxRules,
+    planPricing: product.planPricing.map((entry) => ({
+      id: entry.id,
+      recurringPlanId: entry.recurringPlanId,
+      overridePrice: entry.overridePrice,
+      isDefaultPlan: entry.isDefaultPlan,
+      recurringPlan: {
+        id: entry.recurringPlan.id,
+        name: entry.recurringPlan.name,
+        intervalCount: entry.recurringPlan.intervalCount,
+        intervalUnit: entry.recurringPlan.intervalUnit,
+        price: entry.recurringPlan.price,
+        minimumQuantity: entry.recurringPlan.minimumQuantity,
+        startDate: entry.recurringPlan.startDate,
+        endDate: entry.recurringPlan.endDate,
+        autoCloseEnabled: entry.recurringPlan.autoCloseEnabled,
+        autoCloseAfterCount: entry.recurringPlan.autoCloseAfterCount,
+        autoCloseAfterUnit: entry.recurringPlan.autoCloseAfterUnit,
+        isClosable: entry.recurringPlan.isClosable,
+        isPausable: entry.recurringPlan.isPausable,
+        isRenewable: entry.recurringPlan.isRenewable,
+        isActive: entry.recurringPlan.isActive
+      }
+    })),
     recurringPrices: product.planPricing.map((entry) => ({
       recurringPlanId: entry.recurringPlanId,
       planName: entry.recurringPlan.name,
       price: entry.overridePrice ?? entry.recurringPlan.price,
+      intervalCount: entry.recurringPlan.intervalCount,
       billingPeriod: entry.recurringPlan.intervalUnit,
       minimumQuantity: entry.recurringPlan.minimumQuantity,
       startDate: entry.recurringPlan.startDate,
       endDate: entry.recurringPlan.endDate,
       autoCloseEnabled: entry.recurringPlan.autoCloseEnabled,
+      autoCloseAfterCount: entry.recurringPlan.autoCloseAfterCount,
+      autoCloseAfterUnit: entry.recurringPlan.autoCloseAfterUnit,
       isClosable: entry.recurringPlan.isClosable,
       isPausable: entry.recurringPlan.isPausable,
       isRenewable: entry.recurringPlan.isRenewable,
       isActive: entry.recurringPlan.isActive
     })),
-    variants: product.variants.map((variant, index) => {
-      const linkedValue = variant.variantValues[0]?.attributeValue;
-      return {
-        id: variant.id,
-        attribute: linkedValue?.attribute.name ?? 'Variant',
-        value: linkedValue?.value ?? variant.name,
-        extraPrice: linkedValue?.extraPrice ?? variant.priceOverride ?? 0,
-        sortOrder: index,
-        isActive: variant.isActive
-      };
-    })
+    variants: formatVariantDetails(product),
+    taxRuleIds: product.productTaxRules.map((entry) => entry.taxRuleId),
+    taxRules: formatTaxRules(product)
   };
 }
 
@@ -287,9 +348,25 @@ async function saveProductGraph(
     where: { id: productId },
     include: {
       planPricing: true,
-      variants: true
+      variants: true,
+      productTaxRules: true
     }
   });
+
+  if (payload.taxRuleIds.length) {
+    const taxRuleCount = await tx.taxRule.count({
+      where: {
+        id: {
+          in: payload.taxRuleIds
+        },
+        isActive: true
+      }
+    });
+
+    if (taxRuleCount !== new Set(payload.taxRuleIds).size) {
+      throw new AppError('One or more selected tax rules are not available', 404, 'TAX_RULE_NOT_FOUND');
+    }
+  }
 
   await tx.productVariantValue.deleteMany({
     where: {
@@ -305,7 +382,7 @@ async function saveProductGraph(
     }
   });
 
-  for (const [index, variant] of payload.variants.entries()) {
+  for (const [, variant] of payload.variants.entries()) {
     const attributeValue = await ensureAttributeValue(
       tx,
       variant.attribute.trim(),
@@ -328,48 +405,40 @@ async function saveProductGraph(
     });
   }
 
-  const existingPricingIds = new Set(product.planPricing.map((entry) => entry.recurringPlanId));
-
   for (const [index, recurringPrice] of payload.recurringPrices.entries()) {
-    const recurringPlanId =
-      recurringPrice.recurringPlanId && existingPricingIds.has(recurringPrice.recurringPlanId)
-        ? recurringPrice.recurringPlanId
-        : undefined;
+    const existingRecurringPlan =
+      recurringPrice.recurringPlanId
+        ? await tx.recurringPlan.findUnique({
+            where: {
+              id: recurringPrice.recurringPlanId
+            }
+          })
+        : null;
 
-    const recurringPlan = recurringPlanId
-      ? await tx.recurringPlan.update({
-          where: { id: recurringPlanId },
-          data: {
-            name: recurringPrice.planName.trim(),
-            intervalCount: 1,
-            intervalUnit: recurringPrice.billingPeriod,
-            price: new Prisma.Decimal(recurringPrice.price),
-            minimumQuantity: recurringPrice.minimumQuantity,
-            startDate: recurringPrice.startDate,
-            endDate: recurringPrice.endDate,
-            autoCloseEnabled: recurringPrice.autoCloseEnabled,
-            isClosable: recurringPrice.isClosable,
-            isPausable: recurringPrice.isPausable,
-            isRenewable: recurringPrice.isRenewable,
-            isActive: recurringPrice.isActive
-          }
-        })
+    const recurringPlan = existingRecurringPlan
+      ? existingRecurringPlan
       : await tx.recurringPlan.create({
           data: {
             name: recurringPrice.planName.trim(),
-            intervalCount: 1,
+            intervalCount: recurringPrice.intervalCount,
             intervalUnit: recurringPrice.billingPeriod,
             price: new Prisma.Decimal(recurringPrice.price),
             minimumQuantity: recurringPrice.minimumQuantity,
             startDate: recurringPrice.startDate,
             endDate: recurringPrice.endDate,
             autoCloseEnabled: recurringPrice.autoCloseEnabled,
+            autoCloseAfterCount: recurringPrice.autoCloseEnabled ? recurringPrice.autoCloseAfterCount : null,
+            autoCloseAfterUnit: recurringPrice.autoCloseEnabled ? recurringPrice.autoCloseAfterUnit : null,
             isClosable: recurringPrice.isClosable,
             isPausable: recurringPrice.isPausable,
             isRenewable: recurringPrice.isRenewable,
             isActive: recurringPrice.isActive
           }
         });
+
+    if (recurringPrice.recurringPlanId && !recurringPlan) {
+      throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+    }
 
     recurringPlanIdsToKeep.push(recurringPlan.id);
 
@@ -404,6 +473,37 @@ async function saveProductGraph(
     }
   });
 
+  const taxRuleIdsToKeep = [...new Set(payload.taxRuleIds)];
+
+  await tx.productTaxRule.deleteMany({
+    where: {
+      productId: product.id,
+      ...(taxRuleIdsToKeep.length
+        ? {
+            taxRuleId: {
+              notIn: taxRuleIdsToKeep
+            }
+          }
+        : {})
+    }
+  });
+
+  for (const taxRuleId of taxRuleIdsToKeep) {
+    await tx.productTaxRule.upsert({
+      where: {
+        productId_taxRuleId: {
+          productId: product.id,
+          taxRuleId
+        }
+      },
+      create: {
+        productId: product.id,
+        taxRuleId
+      },
+      update: {}
+    });
+  }
+
   const saved = await tx.product.findUniqueOrThrow({
     where: { id: product.id },
     include: productAdminInclude
@@ -422,10 +522,21 @@ catalogRouter.get('/categories', async (_request, response) => {
 
 catalogRouter.get('/products', async (request, response, next) => {
   try {
-    const { page, pageSize, search, sortBy } = productListQuerySchema.parse(request.query);
+    const { page, pageSize, search, sortBy, categoryId, productType, minPrice, maxPrice } =
+      productListQuerySchema.parse(request.query);
     const normalizedSearch = search?.trim();
     const where: Prisma.ProductWhereInput = {
       isActive: true,
+      ...(categoryId ? { categoryId } : {}),
+      ...(productType ? { productType } : {}),
+      ...(minPrice !== undefined || maxPrice !== undefined
+        ? {
+            baseSalesPrice: {
+              ...(minPrice !== undefined ? { gte: minPrice } : {}),
+              ...(maxPrice !== undefined ? { lte: maxPrice } : {})
+            }
+          }
+        : {}),
       ...(normalizedSearch
         ? {
             OR: [
@@ -446,7 +557,7 @@ catalogRouter.get('/products', async (request, response, next) => {
     const [items, total] = await Promise.all([
       prisma.product.findMany({
         where,
-        include: { category: true, variants: true, planPricing: true },
+        include: productAdminInclude,
         orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize
@@ -454,7 +565,7 @@ catalogRouter.get('/products', async (request, response, next) => {
       prisma.product.count({ where })
     ]);
 
-    response.json({ data: { items, page, pageSize, total } });
+    response.json({ data: { items: items.map(formatAdminProduct), page, pageSize, total } });
   } catch (error) {
     next(error);
   }
@@ -466,14 +577,14 @@ catalogRouter.get('/products/:slug', async (request, response, next) => {
 
     const product = await prisma.product.findFirst({
       where: { slug, isActive: true },
-      include: { category: true, variants: true, planPricing: true }
+      include: productAdminInclude
     });
 
     if (!product) {
       throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
     }
 
-    response.json({ data: product });
+    response.json({ data: formatAdminProduct(product) });
   } catch (error) {
     next(error);
   }
@@ -673,10 +784,42 @@ catalogRouter.post('/products', requireRole('admin'), async (request, response, 
 
 catalogRouter.get('/recurring-plans', async (_request, response) => {
   const plans = await prisma.recurringPlan.findMany({
+    include: {
+      _count: {
+        select: {
+          productPricing: true,
+          subscriptions: true,
+          quotationTemplates: true
+        }
+      }
+    },
     orderBy: { createdAt: 'desc' }
   });
 
-  response.json({ data: plans });
+  response.json({
+    data: plans.map((plan) => ({
+      id: plan.id,
+      name: plan.name,
+      intervalCount: plan.intervalCount,
+      intervalUnit: plan.intervalUnit,
+      price: plan.price,
+      minimumQuantity: plan.minimumQuantity,
+      startDate: plan.startDate,
+      endDate: plan.endDate,
+      autoCloseEnabled: plan.autoCloseEnabled,
+      autoCloseAfterCount: plan.autoCloseAfterCount,
+      autoCloseAfterUnit: plan.autoCloseAfterUnit,
+      isClosable: plan.isClosable,
+      isPausable: plan.isPausable,
+      isRenewable: plan.isRenewable,
+      isActive: plan.isActive,
+      productsCount: plan._count.productPricing,
+      subscriptionsCount: plan._count.subscriptions,
+      templatesCount: plan._count.quotationTemplates,
+      createdAt: plan.createdAt,
+      updatedAt: plan.updatedAt
+    }))
+  });
 });
 
 catalogRouter.post('/recurring-plans', requireRole('admin', 'internal_user'), async (request, response, next) => {
@@ -689,12 +832,15 @@ catalogRouter.post('/recurring-plans', requireRole('admin', 'internal_user'), as
         intervalUnit: payload.intervalUnit,
         price: new Prisma.Decimal(payload.price),
         minimumQuantity: payload.minimumQuantity,
+        startDate: payload.startDate,
+        endDate: payload.endDate,
         autoCloseEnabled: payload.autoCloseEnabled,
-        autoCloseAfterCount: payload.autoCloseAfterCount,
-        autoCloseAfterUnit: payload.autoCloseAfterUnit,
+        autoCloseAfterCount: payload.autoCloseEnabled ? payload.autoCloseAfterCount : null,
+        autoCloseAfterUnit: payload.autoCloseEnabled ? payload.autoCloseAfterUnit : null,
         isClosable: payload.isClosable,
         isPausable: payload.isPausable,
-        isRenewable: payload.isRenewable
+        isRenewable: payload.isRenewable,
+        isActive: true
       }
     });
 
@@ -704,12 +850,73 @@ catalogRouter.post('/recurring-plans', requireRole('admin', 'internal_user'), as
   }
 });
 
+catalogRouter.delete('/recurring-plans/:id', requireRole('admin'), async (request, response, next) => {
+  try {
+    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+
+    const existing = await prisma.recurringPlan.findUnique({
+      where: { id },
+      select: { id: true }
+    });
+
+    if (!existing) {
+      throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+    }
+
+    await prisma.recurringPlan.update({
+      where: { id },
+      data: {
+        isActive: false
+      }
+    });
+
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 catalogRouter.get('/discounts', requireRole('admin', 'internal_user'), async (_request, response) => {
   const discounts = await prisma.discountRule.findMany({
+    include: {
+      products: {
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      }
+    },
     orderBy: { createdAt: 'desc' }
   });
 
-  response.json({ data: discounts });
+  response.json({
+    data: discounts.map((discount) => ({
+      id: discount.id,
+      name: discount.name,
+      code: discount.code,
+      discountType: discount.discountType,
+      value: discount.value,
+      minimumPurchase: discount.minimumPurchase,
+      minimumQuantity: discount.minimumQuantity,
+      startDate: discount.startDate,
+      endDate: discount.endDate,
+      limitUsageEnabled: discount.limitUsageEnabled,
+      usageLimit: discount.usageLimit,
+      usageCount: discount.usageCount,
+      scopeType: discount.scopeType,
+      isActive: discount.isActive,
+      products: discount.products.map((entry) => ({
+        id: entry.product.id,
+        name: entry.product.name
+      })),
+      createdAt: discount.createdAt,
+      updatedAt: discount.updatedAt
+    }))
+  });
 });
 
 catalogRouter.post('/discounts', requireRole('admin'), async (request, response, next) => {
@@ -717,23 +924,114 @@ catalogRouter.post('/discounts', requireRole('admin'), async (request, response,
     const payload = discountRuleSchema.parse(request.body);
     const actorId = (request as AuthenticatedRequest).auth?.userId;
 
+    if (!actorId) {
+      throw new AppError('Authentication required', 401);
+    }
+
+    if (payload.productIds?.length) {
+      const productCount = await prisma.product.count({
+        where: {
+          id: {
+            in: payload.productIds
+          },
+          isActive: true
+        }
+      });
+
+      if (productCount !== new Set(payload.productIds).size) {
+        throw new AppError('One or more selected products are not available', 404, 'PRODUCT_NOT_FOUND');
+      }
+    }
+
     const discount = await prisma.discountRule.create({
       data: {
         name: payload.name,
-        code: payload.code,
+        code: payload.code?.trim() ? payload.code.trim().toUpperCase() : undefined,
         discountType: payload.discountType,
         value: new Prisma.Decimal(payload.value),
         minimumPurchase:
           payload.minimumPurchase !== undefined ? new Prisma.Decimal(payload.minimumPurchase) : undefined,
         minimumQuantity: payload.minimumQuantity,
+        startDate: payload.startDate,
+        endDate: payload.endDate,
         limitUsageEnabled: payload.limitUsageEnabled,
-        usageLimit: payload.usageLimit,
+        usageLimit: payload.limitUsageEnabled ? payload.usageLimit : null,
         scopeType: payload.scopeType,
-        createdById: actorId!
+        createdById: actorId,
+        isActive: true,
+        products:
+          payload.scopeType === DiscountScopeType.selected_products && payload.productIds?.length
+            ? {
+                create: payload.productIds.map((productId) => ({
+                  productId
+                }))
+              }
+            : undefined
+      },
+      include: {
+        products: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        }
       }
     });
 
-    response.status(201).json({ data: discount });
+    response.status(201).json({
+      data: {
+        id: discount.id,
+        name: discount.name,
+        code: discount.code,
+        discountType: discount.discountType,
+        value: discount.value,
+        minimumPurchase: discount.minimumPurchase,
+        minimumQuantity: discount.minimumQuantity,
+        startDate: discount.startDate,
+        endDate: discount.endDate,
+        limitUsageEnabled: discount.limitUsageEnabled,
+        usageLimit: discount.usageLimit,
+        usageCount: discount.usageCount,
+        scopeType: discount.scopeType,
+        isActive: discount.isActive,
+        products: discount.products.map((entry) => ({
+          id: entry.product.id,
+          name: entry.product.name
+        })),
+        createdAt: discount.createdAt,
+        updatedAt: discount.updatedAt
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+catalogRouter.delete('/discounts/:id', requireRole('admin'), async (request, response, next) => {
+  try {
+    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+
+    const existing = await prisma.discountRule.findUnique({
+      where: { id },
+      select: { id: true }
+    });
+
+    if (!existing) {
+      throw new AppError('Discount not found', 404, 'DISCOUNT_NOT_FOUND');
+    }
+
+    await prisma.discountRule.update({
+      where: { id },
+      data: {
+        isActive: false
+      }
+    });
+
+    response.status(204).send();
   } catch (error) {
     next(error);
   }

@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import { Surface } from '../../components/layout';
 import {
   apiRequest,
   ApiError,
+  formatCurrency,
   formatDate,
+  type PaginatedResponse,
   type PaymentTermConfig,
+  type Product,
   type ProductAttributeConfig,
   type QuotationTemplateConfig,
   type RecurringPlan
@@ -15,11 +18,34 @@ import { useSession } from '../../lib/session';
 
 const fieldClass = 'rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3';
 
+type AttributeValueDraft = {
+  value: string;
+  extraPrice: string;
+};
+
+type TemplateLineDraft = {
+  productId: string;
+  quantity: string;
+  unitPrice: string;
+};
+
+const blankAttributeValue = (): AttributeValueDraft => ({
+  value: '',
+  extraPrice: '0'
+});
+
+const blankTemplateLine = (): TemplateLineDraft => ({
+  productId: '',
+  quantity: '1',
+  unitPrice: '0'
+});
+
 export function AttributeListPage() {
   const { token } = useSession();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
+  const [values, setValues] = useState<AttributeValueDraft[]>([blankAttributeValue()]);
   const [error, setError] = useState<string | null>(null);
 
   const attributesQuery = useQuery({
@@ -32,11 +58,20 @@ export function AttributeListPage() {
       apiRequest<ProductAttributeConfig>('/attributes', {
         token,
         method: 'POST',
-        body: JSON.stringify({ name })
+        body: JSON.stringify({
+          name,
+          values: values
+            .filter((entry) => entry.value.trim())
+            .map((entry) => ({
+              value: entry.value.trim(),
+              extraPrice: Number(entry.extraPrice || 0)
+            }))
+        })
       }),
     onSuccess: async () => {
       setError(null);
       setName('');
+      setValues([blankAttributeValue()]);
       await queryClient.invalidateQueries({ queryKey: ['admin-config-attributes'] });
     },
     onError: (mutationError) => {
@@ -65,18 +100,59 @@ export function AttributeListPage() {
   }, [attributesQuery.data, search]);
 
   return (
-    <Surface title="Attributes" description="Attribute masters used by product variants. Configuration is managed from this dedicated list page.">
+    <Surface title="Attributes" description="Create reusable product attributes and the extra-price values that products can use as variants.">
       {error ? <Message error={error} /> : null}
       <ConfigToolbar search={search} setSearch={setSearch} />
       <div className="mb-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
-        <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+        <div className="grid gap-4 md:grid-cols-2">
           <Field label="Attribute name">
             <input className={fieldClass} onChange={(event) => setName(event.target.value)} value={name} />
           </Field>
-          <div className="flex items-end">
+          <div className="flex items-end justify-end">
             <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => createMutation.mutate()} type="button">
               New
             </button>
+          </div>
+        </div>
+        <div className="mt-5 rounded-[24px] border border-white/10 bg-slate-950/25 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-slate-200">Attribute values</p>
+            <button className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white" onClick={() => setValues((current) => [...current, blankAttributeValue()])} type="button">
+              Add Value
+            </button>
+          </div>
+          <div className="grid gap-3">
+            {values.map((entry, index) => (
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]" key={`${index}-${entry.value}`}>
+                <input
+                  className={fieldClass}
+                  onChange={(event) =>
+                    setValues((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, value: event.target.value } : item)))
+                  }
+                  placeholder="Value"
+                  value={entry.value}
+                />
+                <input
+                  className={fieldClass}
+                  min="0"
+                  onChange={(event) =>
+                    setValues((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, extraPrice: event.target.value } : item)))
+                  }
+                  placeholder="Default extra price"
+                  type="number"
+                  value={entry.extraPrice}
+                />
+                <button
+                  className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-200"
+                  onClick={() =>
+                    setValues((current) => (current.length === 1 ? [blankAttributeValue()] : current.filter((_, itemIndex) => itemIndex !== index)))
+                  }
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -85,7 +161,15 @@ export function AttributeListPage() {
         rows={rows.map((entry) => (
           <tr className="border-t border-white/10 text-slate-100" key={entry.id}>
             <td className="px-4 py-3 font-semibold">{entry.name}</td>
-            <td className="px-4 py-3 text-slate-300">{entry.valuesCount}</td>
+            <td className="px-4 py-3">
+              <div className="flex flex-wrap gap-2">
+                {entry.values.length ? entry.values.map((value) => (
+                  <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs text-slate-200" key={value.id}>
+                    {value.value} {Number(value.extraPrice) > 0 ? `| +${formatCurrency(value.extraPrice)}` : ''}
+                  </span>
+                )) : <span className="text-slate-400">No values</span>}
+              </div>
+            </td>
             <td className="px-4 py-3">{entry.isActive ? 'Active' : 'Archived'}</td>
             <td className="px-4 py-3 text-slate-300">{formatDate(entry.updatedAt)}</td>
             <td className="px-4 py-3">
@@ -158,7 +242,7 @@ export function PaymentTermListPage() {
   }, [paymentTermsQuery.data, search]);
 
   return (
-    <Surface title="Payment Terms" description="Reusable payment-term labels for subscription and quotation setup.">
+    <Surface title="Payment Terms" description="Reusable payment-term labels for quotations and subscriptions.">
       {error ? <Message error={error} /> : null}
       <ConfigToolbar search={search} setSearch={setSearch} />
       <div className="mb-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
@@ -210,7 +294,11 @@ export function QuotationTemplateListPage() {
   const [validityDays, setValidityDays] = useState('30');
   const [recurringPlanId, setRecurringPlanId] = useState('');
   const [paymentTermLabel, setPaymentTermLabel] = useState('');
+  const [isLastForever, setIsLastForever] = useState(true);
+  const [durationCount, setDurationCount] = useState('12');
+  const [durationUnit, setDurationUnit] = useState<'week' | 'month' | 'year'>('month');
   const [description, setDescription] = useState('');
+  const [lines, setLines] = useState<TemplateLineDraft[]>([blankTemplateLine()]);
   const [error, setError] = useState<string | null>(null);
 
   const templatesQuery = useQuery({
@@ -228,6 +316,13 @@ export function QuotationTemplateListPage() {
     queryFn: () => apiRequest<PaymentTermConfig[]>('/payment-terms', { token })
   });
 
+  const productsQuery = useQuery({
+    queryKey: ['admin-config-products-options'],
+    queryFn: () => apiRequest<PaginatedResponse<Product>>('/admin/products?page=1&pageSize=100&isActive=true', { token })
+  });
+
+  const products = productsQuery.data?.items ?? [];
+
   const createMutation = useMutation({
     mutationFn: async () =>
       apiRequest<QuotationTemplateConfig>('/quotation-templates', {
@@ -238,7 +333,17 @@ export function QuotationTemplateListPage() {
           validityDays: Number(validityDays),
           recurringPlanId: recurringPlanId || null,
           paymentTermLabel,
-          description: description || undefined
+          isLastForever,
+          durationCount: isLastForever ? null : Number(durationCount),
+          durationUnit: isLastForever ? null : durationUnit,
+          description: description || undefined,
+          lines: lines
+            .filter((line) => line.productId)
+            .map((line) => ({
+              productId: line.productId,
+              quantity: Number(line.quantity),
+              unitPrice: Number(line.unitPrice)
+            }))
         })
       }),
     onSuccess: async () => {
@@ -247,7 +352,11 @@ export function QuotationTemplateListPage() {
       setValidityDays('30');
       setRecurringPlanId('');
       setPaymentTermLabel('');
+      setIsLastForever(true);
+      setDurationCount('12');
+      setDurationUnit('month');
       setDescription('');
+      setLines([blankTemplateLine()]);
       await queryClient.invalidateQueries({ queryKey: ['admin-config-quotation-templates'] });
     },
     onError: (mutationError) => {
@@ -281,7 +390,7 @@ export function QuotationTemplateListPage() {
   }, [search, templatesQuery.data]);
 
   return (
-    <Surface title="Quotation Templates" description="Template-level defaults for subscription quotations, validity, recurring plans, and payment terms.">
+    <Surface title="Quotation Templates" description="Save reusable quotation setups with validity, plan defaults, lifecycle duration, and product lines.">
       {error ? <Message error={error} /> : null}
       <ConfigToolbar search={search} setSearch={setSearch} />
       <div className="mb-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
@@ -289,12 +398,12 @@ export function QuotationTemplateListPage() {
           <Field label="Template name">
             <input className={fieldClass} onChange={(event) => setName(event.target.value)} value={name} />
           </Field>
-          <Field label="Validity days">
+          <Field label="Quotation validity in days">
             <input className={fieldClass} min="1" onChange={(event) => setValidityDays(event.target.value)} type="number" value={validityDays} />
           </Field>
           <Field label="Recurring plan">
             <select className={fieldClass} onChange={(event) => setRecurringPlanId(event.target.value)} value={recurringPlanId}>
-              <option value="">None</option>
+              <option value="">Select recurring plan</option>
               {(recurringPlansQuery.data ?? []).map((plan) => (
                 <option key={plan.id} value={plan.id}>
                   {plan.name}
@@ -312,9 +421,90 @@ export function QuotationTemplateListPage() {
               ))}
             </select>
           </Field>
+          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3 text-sm text-slate-200">
+            <input checked={isLastForever} onChange={(event) => setIsLastForever(event.target.checked)} type="checkbox" />
+            Last forever
+          </label>
+          <Field label="End after">
+            <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+              <input className={fieldClass} disabled={isLastForever} min="1" onChange={(event) => setDurationCount(event.target.value)} type="number" value={durationCount} />
+              <select className={fieldClass} disabled={isLastForever} onChange={(event) => setDurationUnit(event.target.value as 'week' | 'month' | 'year')} value={durationUnit}>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+                <option value="year">Year</option>
+              </select>
+            </div>
+          </Field>
           <Field className="md:col-span-2" label="Description">
             <textarea className={fieldClass} onChange={(event) => setDescription(event.target.value)} rows={3} value={description} />
           </Field>
+        </div>
+        <div className="mt-5 rounded-[24px] border border-white/10 bg-slate-950/25 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-slate-200">Template product lines</p>
+            <button className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white" onClick={() => setLines((current) => [...current, blankTemplateLine()])} type="button">
+              Add Line
+            </button>
+          </div>
+          <div className="grid gap-3">
+            {lines.map((line, index) => {
+              const selectedProduct = products.find((product) => product.id === line.productId);
+              return (
+                <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4 md:grid-cols-[minmax(0,1fr)_120px_180px_auto]" key={`${line.productId}-${index}`}>
+                  <select
+                    className={fieldClass}
+                    onChange={(event) => {
+                      const productId = event.target.value;
+                      const product = products.find((entry) => entry.id === productId);
+                      setLines((current) =>
+                        current.map((entry, entryIndex) =>
+                          entryIndex === index
+                            ? {
+                                ...entry,
+                                productId,
+                                unitPrice: String(product?.baseSalesPrice ?? entry.unitPrice)
+                              }
+                            : entry
+                        )
+                      );
+                    }}
+                    value={line.productId}
+                  >
+                    <option value="">Select product</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className={fieldClass}
+                    min="1"
+                    onChange={(event) => setLines((current) => current.map((entry, entryIndex) => (entryIndex === index ? { ...entry, quantity: event.target.value } : entry)))}
+                    placeholder="Qty"
+                    type="number"
+                    value={line.quantity}
+                  />
+                  <input
+                    className={fieldClass}
+                    min="0"
+                    onChange={(event) => setLines((current) => current.map((entry, entryIndex) => (entryIndex === index ? { ...entry, unitPrice: event.target.value } : entry)))}
+                    placeholder="Unit price"
+                    type="number"
+                    value={line.unitPrice}
+                  />
+                  <button
+                    className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-200"
+                    onClick={() => setLines((current) => (current.length === 1 ? [blankTemplateLine()] : current.filter((_, entryIndex) => entryIndex !== index)))}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                  {selectedProduct ? <p className="md:col-span-4 text-xs text-slate-400">{selectedProduct.description || 'No description'}</p> : null}
+                </div>
+              );
+            })}
+          </div>
         </div>
         <div className="mt-4">
           <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => createMutation.mutate()} type="button">
@@ -323,15 +513,29 @@ export function QuotationTemplateListPage() {
         </div>
       </div>
       <ConfigTable
-        columns={['Template', 'Recurring Plan', 'Payment Term', 'Updated', 'Actions']}
+        columns={['Template', 'Plan / Term', 'Lines', 'Updated', 'Actions']}
         rows={rows.map((entry) => (
           <tr className="border-t border-white/10 text-slate-100" key={entry.id}>
             <td className="px-4 py-3">
               <p className="font-semibold">{entry.name}</p>
-              <p className="text-xs text-slate-400">{entry.validityDays} day validity | {entry.linesCount} lines</p>
+              <p className="text-xs text-slate-400">
+                Valid {entry.validityDays} day(s)
+                {entry.isLastForever ? ' | Last forever' : entry.durationCount && entry.durationUnit ? ` | End after ${entry.durationCount} ${entry.durationUnit}(s)` : ''}
+              </p>
             </td>
-            <td className="px-4 py-3 text-slate-300">{entry.recurringPlan?.name ?? 'None'}</td>
-            <td className="px-4 py-3 text-slate-300">{entry.paymentTermLabel}</td>
+            <td className="px-4 py-3 text-slate-300">
+              <p>{entry.recurringPlan?.name ?? 'No recurring plan'}</p>
+              <p className="text-xs text-slate-400">{entry.paymentTermLabel}</p>
+            </td>
+            <td className="px-4 py-3">
+              <div className="grid gap-1 text-xs text-slate-300">
+                {entry.lines.length ? entry.lines.map((line) => (
+                  <p key={line.id}>
+                    {line.productName} x {line.quantity} | {formatCurrency(line.unitPrice)}
+                  </p>
+                )) : <p className="text-slate-400">No preset lines</p>}
+              </div>
+            </td>
             <td className="px-4 py-3 text-slate-300">{formatDate(entry.updatedAt)}</td>
             <td className="px-4 py-3">
               <button className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200" onClick={() => deleteMutation.mutate(entry.id)} type="button">
@@ -353,7 +557,7 @@ function ConfigToolbar({ search, setSearch }: { search: string; setSearch: (valu
   );
 }
 
-function ConfigTable({ columns, rows }: { columns: string[]; rows: React.ReactNode[] }) {
+function ConfigTable({ columns, rows }: { columns: string[]; rows: ReactNode[] }) {
   return (
     <div className="overflow-x-auto overflow-y-hidden rounded-3xl border border-white/10">
       <table className="min-w-[960px] w-full text-left text-sm">
@@ -376,7 +580,7 @@ function ConfigTable({ columns, rows }: { columns: string[]; rows: React.ReactNo
   );
 }
 
-function Field({ children, className, label }: { children: React.ReactNode; className?: string; label: string }) {
+function Field({ children, className, label }: { children: ReactNode; className?: string; label: string }) {
   return (
     <label className={`grid gap-2 text-sm text-slate-200 ${className ?? ''}`}>
       {label}

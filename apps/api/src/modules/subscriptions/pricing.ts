@@ -119,8 +119,18 @@ export async function buildSubscriptionPricing(
     const variantDelta = Number(variant?.priceOverride ?? 0);
     const unitPrice = roundCurrency(baseUnitPrice + variantDelta);
     const lineSubtotal = roundCurrency(unitPrice * line.quantity);
-    const taxRatePercent = product.productTaxRules.reduce(
-      (sum, productTaxRule) => sum + Number(productTaxRule.taxRule.ratePercent),
+    const taxRules = product.productTaxRules.map((productTaxRule) => ({
+      id: productTaxRule.taxRuleId,
+      computation: productTaxRule.taxRule.computation,
+      amount: Number(productTaxRule.taxRule.ratePercent)
+    }));
+
+    const percentageTaxRate = taxRules.reduce(
+      (sum, taxRule) => sum + (taxRule.computation === 'percentage' ? taxRule.amount : 0),
+      0,
+    );
+    const fixedTaxAmount = taxRules.reduce(
+      (sum, taxRule) => sum + (taxRule.computation === 'fixed' ? taxRule.amount * line.quantity : 0),
       0,
     );
 
@@ -130,7 +140,8 @@ export async function buildSubscriptionPricing(
       product,
       unitPrice,
       lineSubtotal,
-      taxRatePercent
+      percentageTaxRate,
+      fixedTaxAmount
     };
   });
 
@@ -204,7 +215,7 @@ export async function buildSubscriptionPricing(
     remainingDiscount = roundCurrency(remainingDiscount - safeDiscount);
 
     const taxableBase = roundCurrency(line.lineSubtotal - safeDiscount);
-    const taxAmount = roundCurrency((taxableBase * line.taxRatePercent) / 100);
+    const taxAmount = roundCurrency(((taxableBase * line.percentageTaxRate) / 100) + line.fixedTaxAmount);
     const lineTotal = roundCurrency(taxableBase + taxAmount);
 
     return {

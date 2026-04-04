@@ -33,6 +33,7 @@ export function ContactListPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [form, setForm] = useState<ContactFormState>(emptyContactForm);
 
   const contactsQuery = useQuery({
@@ -63,6 +64,7 @@ export function ContactListPage() {
     onSuccess: async () => {
       setError(null);
       setForm(emptyContactForm());
+      setShowCreateForm(false);
       await queryClient.invalidateQueries({ queryKey: ['admin-contacts-management'] });
     },
     onError: (mutationError) => {
@@ -111,52 +113,71 @@ export function ContactListPage() {
         </p>
       ) : null}
 
-      <div className="mb-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold text-white">New Contact</h3>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-white">Create Contact</h3>
           <p className="text-sm text-slate-400">Default contacts are auto-created from users. Use this form for additional contact records.</p>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Name">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} value={form.name} />
-          </Field>
-          <Field label="Email">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))} value={form.email} />
-          </Field>
-          <Field label="Phone">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))} value={form.phone} />
-          </Field>
-          <Field label="Related User">
-            <select className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, userId: event.target.value }))} value={form.userId}>
-              <option value="">Unlinked contact</option>
-              {owners.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name ?? entry.email}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field className="md:col-span-2" label="Address">
-            <textarea className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, address: event.target.value }))} rows={3} value={form.address} />
-          </Field>
-          <Field label="Company Name">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, companyName: event.target.value }))} value={form.companyName} />
-          </Field>
-          <Field label="Notes">
-            <textarea className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, notes: event.target.value }))} rows={3} value={form.notes} />
-          </Field>
-        </div>
-        <div className="mt-4">
-          <button
-            className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={createContactMutation.isPending}
-            onClick={() => createContactMutation.mutate()}
-            type="button"
-          >
-            {createContactMutation.isPending ? 'Creating...' : 'Create Contact'}
-          </button>
-        </div>
+        <button
+          className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950"
+          onClick={() => {
+            setShowCreateForm((value) => !value);
+            setError(null);
+          }}
+          type="button"
+        >
+          {showCreateForm ? 'Close' : 'New Contact'}
+        </button>
       </div>
+
+      {showCreateForm ? (
+        <div className="mb-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-white">New Contact</h3>
+            <p className="text-sm text-slate-400">Default contacts are auto-created from users. Use this form for additional contact records.</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Name">
+              <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} value={form.name} />
+            </Field>
+            <Field label="Email">
+              <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))} value={form.email} />
+            </Field>
+            <Field label="Phone">
+              <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))} value={form.phone} />
+            </Field>
+            <Field label="Related User">
+              <select className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, userId: event.target.value }))} value={form.userId}>
+                <option value="">Unlinked contact</option>
+                {owners.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name ?? entry.email}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field className="md:col-span-2" label="Address">
+              <textarea className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, address: event.target.value }))} rows={3} value={form.address} />
+            </Field>
+            <Field label="Company Name">
+              <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, companyName: event.target.value }))} value={form.companyName} />
+            </Field>
+            <Field label="Notes">
+              <textarea className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, notes: event.target.value }))} rows={3} value={form.notes} />
+            </Field>
+          </div>
+          <div className="mt-4">
+            <button
+              className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={createContactMutation.isPending}
+              onClick={() => createContactMutation.mutate()}
+              type="button"
+            >
+              {createContactMutation.isPending ? 'Creating...' : 'Create Contact'}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mb-5">
         <input className={fieldClass} onChange={(event) => setSearch(event.target.value)} placeholder="Search contacts" value={search} />

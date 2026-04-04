@@ -34,6 +34,7 @@ export function UsersPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
   const [error, setError] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [form, setForm] = useState<UserFormState>(emptyUserForm);
 
   const usersQuery = useQuery({
@@ -58,6 +59,7 @@ export function UsersPage() {
     onSuccess: async () => {
       setError(null);
       setForm(emptyUserForm());
+      setShowCreateForm(false);
       await queryClient.invalidateQueries({ queryKey: ['admin-users-management'] });
     },
     onError: (mutationError) => {
@@ -114,32 +116,49 @@ export function UsersPage() {
         </p>
       ) : null}
 
-      <div className="mb-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-white">Create User</h3>
+          <p className="text-sm text-slate-400">Default contact auto-linked on creation.</p>
+        </div>
+        <button
+          className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950"
+          onClick={() => {
+            setShowCreateForm((value) => !value);
+            setError(null);
+          }}
+          type="button"
+        >
+          {showCreateForm ? 'Close' : 'New User'}
+        </button>
+      </div>
+
+      {showCreateForm ? (
+        <div className="mb-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
+          <div className="mb-4">
             <h3 className="text-lg font-semibold text-white">New User</h3>
             <p className="text-sm text-slate-400">Default contact auto-linked on creation.</p>
           </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Name"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} value={form.name} /></Field>
+            <Field label="Email"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))} value={form.email} /></Field>
+            <Field label="Phone"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))} value={form.phone} /></Field>
+            <Field label="Role">
+              <select className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, role: event.target.value as 'admin' | 'internal_user' }))} value={form.role}>
+                <option value="internal_user">Internal User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </Field>
+            <Field className="md:col-span-2" label="Address"><textarea className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, address: event.target.value }))} rows={3} value={form.address} /></Field>
+            <Field label="Password"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))} type="password" value={form.password} /></Field>
+          </div>
+          <div className="mt-4">
+            <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => createUserMutation.mutate()} type="button">
+              Create User
+            </button>
+          </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Name"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} value={form.name} /></Field>
-          <Field label="Email"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))} value={form.email} /></Field>
-          <Field label="Phone"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))} value={form.phone} /></Field>
-          <Field label="Role">
-            <select className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, role: event.target.value as 'admin' | 'internal_user' }))} value={form.role}>
-              <option value="internal_user">Internal User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </Field>
-          <Field className="md:col-span-2" label="Address"><textarea className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, address: event.target.value }))} rows={3} value={form.address} /></Field>
-          <Field label="Password"><input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))} type="password" value={form.password} /></Field>
-        </div>
-        <div className="mt-4">
-          <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => createUserMutation.mutate()} type="button">
-            Create User
-          </button>
-        </div>
-      </div>
+      ) : null}
 
       <div className="mb-5 grid gap-3 md:grid-cols-[1fr_220px]">
         <input
@@ -164,7 +183,7 @@ export function UsersPage() {
       </div>
 
       <div className="overflow-x-auto overflow-y-hidden rounded-3xl border border-white/10">
-        <table className="min-w-[1100px] w-full text-left text-sm">
+        <table className="min-w-[1180px] w-full text-left text-sm">
           <thead className="bg-white/6 text-slate-300">
             <tr>
               <th className="px-4 py-3">User</th>
@@ -199,7 +218,7 @@ export function UsersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">
+                    <span className="inline-flex whitespace-nowrap rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">
                       {entry.role.replace('_', ' ')}
                     </span>
                   </td>
@@ -211,27 +230,28 @@ export function UsersPage() {
                   <td className="px-4 py-3 text-slate-300">{entry.phone || 'Not set'}</td>
                   <td className="px-4 py-3">
                     {entry.defaultContact ? (
-                      <Link className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white" to={`/admin/contacts/${entry.defaultContact.id}`}>
-                        {entry.defaultContact.name}
+                      <Link
+                        className="inline-flex max-w-[180px] rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold text-white"
+                        title={entry.defaultContact.name}
+                        to={`/admin/contacts/${entry.defaultContact.id}`}
+                      >
+                        <span className="truncate">{entry.defaultContact.name}</span>
                       </Link>
                     ) : (
                       <span className="text-slate-400">Missing default contact</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-300">{entry.lastLoginAt ? formatDate(entry.lastLoginAt) : 'Never'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-slate-300">{entry.lastLoginAt ? formatDate(entry.lastLoginAt) : 'Never'}</td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Link className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" to={`/admin/users/${entry.id}`}>
-                        View
-                      </Link>
+                    <div className="flex flex-wrap items-center gap-2">
                       {isAdmin ? (
-                        <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-200">
+                        <span className="inline-flex whitespace-nowrap rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-200">
                           Protected admin
                         </span>
                       ) : null}
                       {entry.role === 'portal_user' ? (
                         <button
-                          className="rounded-full bg-gradient-to-r from-emerald-300 to-sky-400 px-3 py-1 text-xs font-semibold text-slate-950"
+                          className="whitespace-nowrap rounded-full bg-gradient-to-r from-emerald-300 to-sky-400 px-3 py-1 text-xs font-semibold text-slate-950"
                           disabled={isUpdating}
                           onClick={() => updateUserMutation.mutate({ userId: entry.id, payload: { role: 'internal_user' } })}
                           type="button"
@@ -241,7 +261,7 @@ export function UsersPage() {
                       ) : null}
                       {entry.role === 'internal_user' ? (
                         <button
-                          className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white"
+                          className="whitespace-nowrap rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white"
                           disabled={isUpdating}
                           onClick={() => updateUserMutation.mutate({ userId: entry.id, payload: { role: 'portal_user' } })}
                           type="button"
@@ -251,7 +271,7 @@ export function UsersPage() {
                       ) : null}
                       {!isAdmin ? (
                         <button
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${entry.isActive ? 'border border-rose-400/25 bg-rose-500/10 text-rose-200' : 'border border-emerald-400/25 bg-emerald-500/10 text-emerald-200'}`}
+                          className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${entry.isActive ? 'border border-rose-400/25 bg-rose-500/10 text-rose-200' : 'border border-emerald-400/25 bg-emerald-500/10 text-emerald-200'}`}
                           disabled={isUpdating || isSelf}
                           onClick={() =>
                             updateUserMutation.mutate({
@@ -328,7 +348,8 @@ export function UserDetailPage() {
       setError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-users-management'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-user-detail', id] })
+        queryClient.invalidateQueries({ queryKey: ['admin-user-detail', id] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-contacts-management'] })
       ]);
     },
     onError: (mutationError) => {

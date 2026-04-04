@@ -5,12 +5,15 @@ import { z } from 'zod';
 
 import { buildSubscriptionPricing } from './pricing.js';
 import {
+  addInterval,
   defaultQuotationExpiry,
   isCancellableSubscriptionStatus,
   isClosableSubscriptionStatus,
   isDeletableSubscriptionStatus,
   isEditableSubscriptionStatus,
   isFollowUpEligibleStatus,
+  isPausableSubscriptionStatus,
+  resolveAutoCloseDate,
   syncSubscriptionOperationalStatuses,
 } from './lifecycle.js';
 import { AppError } from '../../lib/errors.js';
@@ -120,6 +123,24 @@ function assertSubscriptionAccess(
   if (auth?.role === 'portal_user' && ownerUserId !== auth.userId) {
     throw new AppError('You do not have permission to access this subscription', 403);
   }
+}
+
+function resolveTemplateExpirationDate(
+  template:
+    | {
+        isLastForever: boolean;
+        durationCount: number | null;
+        durationUnit: 'day' | 'week' | 'month' | 'year' | null;
+      }
+    | null
+    | undefined,
+  startDate: Date,
+) {
+  if (!template || template.isLastForever || !template.durationCount || !template.durationUnit) {
+    return null;
+  }
+
+  return addInterval(startDate, template.durationCount, template.durationUnit);
 }
 
 async function createLifecycleSubscription(input: {
@@ -453,20 +474,27 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
       }
     }
 
-    if (!payload.recurringPlanId) {
+    const quotationTemplate = payload.quotationTemplateId
+      ? await prisma.quotationTemplate.findUnique({
+          where: { id: payload.quotationTemplateId }
+        })
+      : null;
+
+    if (payload.quotationTemplateId && !quotationTemplate) {
+      throw new AppError('Quotation template not found', 404, 'QUOTATION_TEMPLATE_NOT_FOUND');
+    }
+
+    const resolvedRecurringPlanId = payload.recurringPlanId ?? quotationTemplate?.recurringPlanId ?? null;
+    if (!resolvedRecurringPlanId) {
       throw new AppError('Recurring plan is required', 400, 'RECURRING_PLAN_REQUIRED');
     }
 
-    if (!payload.paymentTermLabel?.trim()) {
+    const resolvedPaymentTermLabel = payload.paymentTermLabel?.trim() || quotationTemplate?.paymentTermLabel;
+    if (!resolvedPaymentTermLabel) {
       throw new AppError('Payment term is required', 400, 'PAYMENT_TERM_REQUIRED');
     }
 
-    const recurringPlan = payload.recurringPlanId
-      ? await prisma.recurringPlan.findUnique({ where: { id: payload.recurringPlanId } })
-      : null;
-    if (payload.recurringPlanId && !recurringPlan) {
-      throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
-    }
+    const recurringPlan = await prisma.recurringPlan.findUnique({ where: { id: resolvedRecurringPlanId } });
     if (!recurringPlan) {
       throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
     }
@@ -497,10 +525,17 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
     }
 
     const now = new Date();
+    const quotationExpiry = quotationTemplate
+      ? (() => {
+          const expiry = new Date(now);
+          expiry.setDate(expiry.getDate() + quotationTemplate.validityDays);
+          return expiry;
+        })()
+      : defaultQuotationExpiry(now);
     const pricing =
       authRequest.auth?.role === 'portal_user'
         ? await buildSubscriptionPricing(prisma, {
-            recurringPlanId: payload.recurringPlanId,
+            recurringPlanId: resolvedRecurringPlanId,
             discountCode: payload.discountCode,
             lines: payload.lines.map((line) => ({
               productId: line.productId,
@@ -516,15 +551,15 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
         customerContactId,
         salespersonUserId,
         quotationTemplateId: payload.quotationTemplateId,
-        recurringPlanId: payload.recurringPlanId,
+        recurringPlanId: resolvedRecurringPlanId,
         sourceChannel: payload.sourceChannel,
         status: SubscriptionStatus.quotation,
         quotationDate: now,
-        quotationExpiresAt: defaultQuotationExpiry(now),
+        quotationExpiresAt: quotationExpiry,
         confirmedAt: null,
         startDate: null,
         nextInvoiceDate: null,
-        paymentTermLabel: payload.paymentTermLabel,
+        paymentTermLabel: resolvedPaymentTermLabel,
         subtotalAmount:
           pricing?.subtotalAmount ??
           new Prisma.Decimal(
@@ -628,6 +663,7 @@ subscriptionsRouter.post('/:id/confirm', requireRole('admin', 'internal_user', '
       include: {
         customerContact: true,
         recurringPlan: true,
+        quotationTemplate: true,
         lines: true
       }
     });
@@ -670,13 +706,22 @@ subscriptionsRouter.post('/:id/confirm', requireRole('admin', 'internal_user', '
 
     const confirmedAt = new Date();
     const startDate = existing.startDate ?? confirmedAt;
+    const expirationDate =
+      resolveTemplateExpirationDate(existing.quotationTemplate, startDate) ??
+      resolveAutoCloseDate({
+        startDate,
+        autoCloseEnabled: recurringPlan.autoCloseEnabled,
+        autoCloseAfterCount: recurringPlan.autoCloseAfterCount,
+        autoCloseAfterUnit: recurringPlan.autoCloseAfterUnit
+      });
     const subscription = await prisma.subscriptionOrder.update({
       where: { id },
       data: {
         status: SubscriptionStatus.confirmed,
         confirmedAt,
         startDate,
-        nextInvoiceDate: startDate
+        nextInvoiceDate: startDate,
+        expirationDate
       }
     });
 
@@ -741,6 +786,84 @@ subscriptionsRouter.post('/:id/close', requireRole('admin', 'internal_user', 'po
       data: {
         status: SubscriptionStatus.closed,
         expirationDate: new Date()
+      }
+    });
+
+    response.json({ data: subscription });
+  } catch (error) {
+    next(error);
+  }
+});
+
+subscriptionsRouter.post('/:id/pause', requireRole('admin', 'internal_user', 'portal_user'), async (request, response, next) => {
+  try {
+    const auth = (request as AuthenticatedRequest).auth;
+    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+    const existing = await prisma.subscriptionOrder.findUnique({
+      where: { id },
+      include: {
+        customerContact: true,
+        recurringPlan: true
+      }
+    });
+
+    if (!existing) {
+      throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
+    }
+
+    assertSubscriptionAccess(auth, existing.customerContact.userId);
+
+    if (!existing.recurringPlan?.isPausable) {
+      throw new AppError('This recurring plan does not allow pausing', 409);
+    }
+
+    if (!isPausableSubscriptionStatus(existing.status)) {
+      throw new AppError('Only confirmed or live subscriptions can be paused', 409);
+    }
+
+    const subscription = await prisma.subscriptionOrder.update({
+      where: { id },
+      data: {
+        status: SubscriptionStatus.paused
+      }
+    });
+
+    response.json({ data: subscription });
+  } catch (error) {
+    next(error);
+  }
+});
+
+subscriptionsRouter.post('/:id/resume', requireRole('admin', 'internal_user', 'portal_user'), async (request, response, next) => {
+  try {
+    const auth = (request as AuthenticatedRequest).auth;
+    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+    const existing = await prisma.subscriptionOrder.findUnique({
+      where: { id },
+      include: {
+        customerContact: true,
+        recurringPlan: true
+      }
+    });
+
+    if (!existing) {
+      throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
+    }
+
+    assertSubscriptionAccess(auth, existing.customerContact.userId);
+
+    if (!existing.recurringPlan?.isPausable) {
+      throw new AppError('This recurring plan does not allow pausing', 409);
+    }
+
+    if (existing.status !== SubscriptionStatus.paused) {
+      throw new AppError('Only paused subscriptions can be resumed', 409);
+    }
+
+    const subscription = await prisma.subscriptionOrder.update({
+      where: { id },
+      data: {
+        status: existing.startDate && existing.startDate <= new Date() ? SubscriptionStatus.in_progress : SubscriptionStatus.confirmed
       }
     });
 

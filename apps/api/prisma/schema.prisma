@@ -42,6 +42,11 @@ enum DiscountScopeType {
   subscriptions
 }
 
+enum TaxComputation {
+  fixed
+  percentage
+}
+
 enum SubscriptionStatus {
   draft
   quotation
@@ -312,6 +317,9 @@ model QuotationTemplate {
   name             String
   validityDays     Int                     @map("validity_days")
   recurringPlanId  String?                 @db.Uuid @map("recurring_plan_id")
+  isLastForever    Boolean                 @default(false) @map("is_last_forever")
+  durationCount    Int?                    @map("duration_count")
+  durationUnit     IntervalUnit?           @map("duration_unit")
   paymentTermLabel String                  @map("payment_term_label")
   description      String?
   isActive         Boolean                 @default(true) @map("is_active")
@@ -380,6 +388,7 @@ model TaxRule {
   id          String                    @id @default(uuid()) @db.Uuid
   name        String
   ratePercent Decimal                   @db.Decimal(5, 2) @map("rate_percent")
+  computation TaxComputation           @default(percentage)
   taxType     String                    @map("tax_type")
   isInclusive Boolean                   @default(false) @map("is_inclusive")
   isActive    Boolean                   @default(true) @map("is_active")

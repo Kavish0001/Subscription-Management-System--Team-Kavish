@@ -25,6 +25,12 @@ export const closableSubscriptionStatuses = [
   SubscriptionStatus.active
 ] as const;
 
+export const pausableSubscriptionStatuses = [
+  SubscriptionStatus.confirmed,
+  SubscriptionStatus.in_progress,
+  SubscriptionStatus.active
+] as const;
+
 export const cancellableSubscriptionStatuses = [
   SubscriptionStatus.draft,
   SubscriptionStatus.quotation,
@@ -66,6 +72,10 @@ export function isClosableSubscriptionStatus(status: SubscriptionStatus | string
   return closableSubscriptionStatuses.includes(status as (typeof closableSubscriptionStatuses)[number]);
 }
 
+export function isPausableSubscriptionStatus(status: SubscriptionStatus | string) {
+  return pausableSubscriptionStatuses.includes(status as (typeof pausableSubscriptionStatuses)[number]);
+}
+
 export function isCancellableSubscriptionStatus(status: SubscriptionStatus | string) {
   return cancellableSubscriptionStatuses.includes(status as (typeof cancellableSubscriptionStatuses)[number]);
 }
@@ -79,23 +89,74 @@ export function shouldMoveToInProgress(subscription: Pick<SubscriptionOrder, 'st
   return normalizedStatus === SubscriptionStatus.confirmed && Boolean(subscription.startDate && subscription.startDate <= now);
 }
 
+export function addInterval(date: Date, count: number, unit: 'day' | 'week' | 'month' | 'year') {
+  const next = new Date(date);
+
+  switch (unit) {
+    case 'day':
+      next.setDate(next.getDate() + count);
+      break;
+    case 'week':
+      next.setDate(next.getDate() + count * 7);
+      break;
+    case 'month':
+      next.setMonth(next.getMonth() + count);
+      break;
+    case 'year':
+      next.setFullYear(next.getFullYear() + count);
+      break;
+  }
+
+  return next;
+}
+
+export function resolveAutoCloseDate(input: {
+  startDate: Date;
+  autoCloseEnabled: boolean;
+  autoCloseAfterCount: number | null;
+  autoCloseAfterUnit: 'day' | 'week' | 'month' | 'year' | null;
+}) {
+  if (!input.autoCloseEnabled || !input.autoCloseAfterCount || !input.autoCloseAfterUnit) {
+    return null;
+  }
+
+  return addInterval(input.startDate, input.autoCloseAfterCount, input.autoCloseAfterUnit);
+}
+
 export async function syncSubscriptionOperationalStatuses(
   client: Prisma.TransactionClient | { subscriptionOrder: { updateMany: (args: Prisma.SubscriptionOrderUpdateManyArgs) => Promise<unknown> } },
 ) {
+  const now = new Date();
+
   await client.subscriptionOrder.updateMany({
     where: {
       OR: [
         {
           status: SubscriptionStatus.confirmed,
-          startDate: { lte: new Date() }
+          startDate: { lte: now }
         },
         {
           status: SubscriptionStatus.active
         }
-      ]
+      ],
+      expirationDate: null
     },
     data: {
       status: SubscriptionStatus.in_progress
+    }
+  });
+
+  await client.subscriptionOrder.updateMany({
+    where: {
+      status: {
+        in: [SubscriptionStatus.confirmed, SubscriptionStatus.in_progress, SubscriptionStatus.active, SubscriptionStatus.paused]
+      },
+      expirationDate: {
+        lte: now
+      }
+    },
+    data: {
+      status: SubscriptionStatus.closed
     }
   });
 }

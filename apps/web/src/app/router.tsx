@@ -1,14 +1,17 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AdminLayout } from '../features/admin/AdminLayout';
-import { ContactDetailPage, ContactListPage } from '../features/admin/ContactPages';
+import { DiscountListPage, RecurringPlanListPage } from '../features/admin/BillingConfigPages';
+import { AttributeListPage, PaymentTermListPage, QuotationTemplateListPage } from '../features/admin/ConfigurationPages';
+import { ContactDetailPage } from '../features/admin/ContactPages';
 import { DashboardPage } from '../features/admin/DashboardPage';
+import { PeoplePage } from '../features/admin/PeoplePage';
 import { ProductFormPage, ProductListPage } from '../features/admin/ProductPages';
 import { ReportsPage } from '../features/admin/ReportsPage';
 import { ResourceListPage } from '../features/admin/ResourceListPage';
 import { SubscriptionFormPage } from '../features/admin/SubscriptionFormPage';
 import { TaxListPage } from '../features/admin/TaxListPage';
-import { UserDetailPage, UsersPage } from '../features/admin/UsersPage';
+import { UserDetailPage } from '../features/admin/UsersPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { SignupPage } from '../features/auth/SignupPage';
@@ -91,32 +94,23 @@ export const router = createBrowserRouter([
           { path: 'products/:id/edit', element: <RequireAuth roles={['admin']}><ProductFormPage mode="edit" /></RequireAuth> },
           {
             path: 'recurring-plans',
-            element: (
-              <ResourceListPage
-                description="Billing cadence, minimum quantity, and auto-close policy."
-                resource="recurring-plans"
-                title="Recurring Plans"
-              />
-            )
+            element: <RequireAuth roles={['admin']}><RecurringPlanListPage /></RequireAuth>
           },
-          { path: 'taxes', element: <TaxListPage /> },
+          { path: 'attributes', element: <RequireAuth roles={['admin']}><AttributeListPage /></RequireAuth> },
+          { path: 'quotation-templates', element: <RequireAuth roles={['admin']}><QuotationTemplateListPage /></RequireAuth> },
+          { path: 'payment-terms', element: <RequireAuth roles={['admin']}><PaymentTermListPage /></RequireAuth> },
+          { path: 'taxes', element: <RequireAuth roles={['admin']}><TaxListPage /></RequireAuth> },
           {
             path: 'discounts',
-            element: (
-              <ResourceListPage
-                description="Admin-only discount rules and usage limits."
-                resource="discounts"
-                title="Discounts"
-              />
-            )
+            element: <RequireAuth roles={['admin']}><DiscountListPage /></RequireAuth>
           },
           { path: 'reports', element: <ReportsPage /> },
           {
             path: 'users',
-            element: <RequireAuth roles={['admin']}><UsersPage /></RequireAuth>
+            element: <RequireAuth roles={['admin']}><PeoplePage /></RequireAuth>
           },
           { path: 'users/:id', element: <RequireAuth roles={['admin']}><UserDetailPage /></RequireAuth> },
-          { path: 'contacts', element: <RequireAuth roles={['admin']}><ContactListPage /></RequireAuth> },
+          { path: 'contacts', element: <Navigate replace to="/admin/users" /> },
           { path: 'contacts/:id', element: <RequireAuth roles={['admin']}><ContactDetailPage /></RequireAuth> },
           { path: '*', element: <Navigate replace to="/admin" /> }
         ]
