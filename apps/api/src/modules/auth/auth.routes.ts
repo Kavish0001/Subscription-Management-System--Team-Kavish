@@ -1,8 +1,7 @@
 import { Router } from 'express';
 
-import { requireAuth } from '../../middleware/auth.js';
-
 import { login, signup } from './auth.service.js';
+import { requireAuth, type AuthenticatedRequest } from '../../middleware/auth.js';
 
 const refreshCookieName = 'refreshToken';
 
@@ -42,5 +41,5 @@ authRouter.post('/logout', (_request, response) => {
 });
 
 authRouter.get('/me', requireAuth, async (request, response) => {
-  response.json({ data: request.auth });
+  response.json({ data: (request as AuthenticatedRequest).auth });
 });

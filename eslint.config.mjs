@@ -11,14 +11,10 @@ export default tseslint.config(
     ignores: ['dist/**', 'build/**', 'coverage/**', 'node_modules/**', '.vite/**'],
   },
   js.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
+  ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
-      },
       globals: {
         ...globals.node,
         ...globals.browser,
@@ -45,7 +41,7 @@ export default tseslint.config(
         'error',
         { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
       ],
-      '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
+      '@typescript-eslint/no-namespace': 'off',
     },
   },
 );

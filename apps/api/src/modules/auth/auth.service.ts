@@ -1,8 +1,8 @@
+import { UserRole } from '@prisma/client';
+import { type SessionUser, loginSchema, signupSchema } from '@subscription/shared';
 import argon2 from 'argon2';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 
-import { type SessionUser, loginSchema, signupSchema } from '@subscription/shared';
-import { UserRole } from '@prisma/client';
 
 import { env } from '../../config/env.js';
 import { AppError } from '../../lib/errors.js';

@@ -1,11 +1,10 @@
-import { Router } from 'express';
-
-import { createSubscriptionSchema } from '@subscription/shared';
 import { Prisma, SubscriptionStatus } from '@prisma/client';
+import { createSubscriptionSchema } from '@subscription/shared';
+import { Router } from 'express';
 
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
-import { requireAuth, requireRole } from '../../middleware/auth.js';
+import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middleware/auth.js';
 
 export const subscriptionsRouter = Router();
 
@@ -47,10 +46,11 @@ subscriptionsRouter.get('/', requireRole('admin', 'internal_user'), async (_requ
 
 subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user'), async (request, response, next) => {
   try {
+    const authRequest = request as AuthenticatedRequest;
     const payload = createSubscriptionSchema.parse(request.body);
-    const actorId = request.auth?.userId;
+    const actorId = authRequest.auth?.userId;
     const salespersonUserId =
-      request.auth?.role === 'portal_user' ? actorId : payload.salespersonUserId ?? actorId;
+      authRequest.auth?.role === 'portal_user' ? actorId : payload.salespersonUserId ?? actorId;
 
     if (!salespersonUserId) {
       throw new AppError('Salesperson could not be determined', 400);

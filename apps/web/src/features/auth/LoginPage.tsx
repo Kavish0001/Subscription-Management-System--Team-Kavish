@@ -1,8 +1,8 @@
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema } from '@subscription/shared';
+import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
-import { z } from 'zod';
+import { type z } from 'zod';
 
 const schema = loginSchema;
 type LoginForm = z.infer<typeof schema>;

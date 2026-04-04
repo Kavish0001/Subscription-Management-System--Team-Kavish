@@ -1,22 +1,19 @@
+import type { UserRole } from '@subscription/shared';
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-
-import type { UserRole } from '@subscription/shared';
 
 import { env } from '../config/env.js';
 import { AppError } from '../lib/errors.js';
 
-declare global {
-  namespace Express {
-    interface Request {
-      auth?: {
-        userId: string;
-        email: string;
-        role: UserRole;
-      };
-    }
-  }
-}
+export type AuthContext = {
+  userId: string;
+  email: string;
+  role: UserRole;
+};
+
+export type AuthenticatedRequest = Request & {
+  auth?: AuthContext;
+};
 
 type TokenPayload = {
   sub: string;
@@ -25,6 +22,7 @@ type TokenPayload = {
 };
 
 export function requireAuth(request: Request, _response: Response, next: NextFunction) {
+  const authRequest = request as AuthenticatedRequest;
   const authHeader = request.headers.authorization;
   const token = authHeader?.replace(/^Bearer\s+/i, '') ?? request.cookies.accessToken;
 
@@ -34,7 +32,7 @@ export function requireAuth(request: Request, _response: Response, next: NextFun
 
   try {
     const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as TokenPayload;
-    request.auth = {
+    authRequest.auth = {
       userId: payload.sub,
       email: payload.email,
       role: payload.role
@@ -47,11 +45,13 @@ export function requireAuth(request: Request, _response: Response, next: NextFun
 
 export function requireRole(...allowedRoles: UserRole[]) {
   return (request: Request, _response: Response, next: NextFunction) => {
-    if (!request.auth) {
+    const authRequest = request as AuthenticatedRequest;
+
+    if (!authRequest.auth) {
       return next(new AppError('Authentication required', 401));
     }
 
-    if (!allowedRoles.includes(request.auth.role)) {
+    if (!allowedRoles.includes(authRequest.auth.role)) {
       return next(new AppError('You do not have permission to perform this action', 403));
     }
 

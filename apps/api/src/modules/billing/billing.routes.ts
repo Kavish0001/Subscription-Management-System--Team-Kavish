@@ -1,13 +1,14 @@
-import { Router } from 'express';
-
-import { createInvoiceSchema } from '@subscription/shared';
 import { InvoiceStatus, PaymentStatus, Prisma, SubscriptionStatus } from '@prisma/client';
+import { createInvoiceSchema } from '@subscription/shared';
+import { Router, type Request } from 'express';
+
 
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 
 export const billingRouter = Router();
+type InvoiceIdParams = { id: string };
 
 billingRouter.use(requireAuth);
 
@@ -71,8 +72,8 @@ billingRouter.post('/invoices', requireRole('admin', 'internal_user'), async (re
   }
 });
 
-billingRouter.post('/invoices/:id/confirm', requireRole('admin', 'internal_user'), async (request, response) => {
-  const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+billingRouter.post('/invoices/:id/confirm', requireRole('admin', 'internal_user'), async (request: Request<InvoiceIdParams>, response) => {
+  const id = request.params.id;
   const invoice = await prisma.invoice.update({
     where: { id },
     data: { status: InvoiceStatus.confirmed }
@@ -81,8 +82,8 @@ billingRouter.post('/invoices/:id/confirm', requireRole('admin', 'internal_user'
   response.json({ data: invoice });
 });
 
-billingRouter.post('/invoices/:id/cancel', requireRole('admin', 'internal_user'), async (request, response) => {
-  const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+billingRouter.post('/invoices/:id/cancel', requireRole('admin', 'internal_user'), async (request: Request<InvoiceIdParams>, response) => {
+  const id = request.params.id;
   const invoice = await prisma.invoice.update({
     where: { id },
     data: {
@@ -94,8 +95,8 @@ billingRouter.post('/invoices/:id/cancel', requireRole('admin', 'internal_user')
   response.json({ data: invoice });
 });
 
-billingRouter.post('/invoices/:id/restore-draft', requireRole('admin', 'internal_user'), async (request, response) => {
-  const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+billingRouter.post('/invoices/:id/restore-draft', requireRole('admin', 'internal_user'), async (request: Request<InvoiceIdParams>, response) => {
+  const id = request.params.id;
   const invoice = await prisma.invoice.update({
     where: { id },
     data: {

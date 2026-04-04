@@ -7,6 +7,7 @@ import { SubscriptionFormPage } from '../features/admin/SubscriptionFormPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { SignupPage } from '../features/auth/SignupPage';
+import { PortalLayout } from '../features/portal/PortalLayout';
 import {
   CartPage,
   CheckoutAddressPage,
@@ -20,7 +21,6 @@ import {
   ProfilePage,
   ShopPage
 } from '../features/portal/PortalPages';
-import { PortalLayout } from '../features/portal/PortalLayout';
 
 export const router = createBrowserRouter([
   {

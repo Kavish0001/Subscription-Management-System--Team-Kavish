@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import type { ComponentProps } from 'react';
+import { RouterProvider } from 'react-router-dom';
 
 const queryClient = new QueryClient();
 
-export function AppProviders({ router }: { router: ReturnType<typeof createBrowserRouter> }) {
+export function AppProviders({ router }: { router: ComponentProps<typeof RouterProvider>['router'] }) {
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />

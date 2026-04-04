@@ -20,3 +20,4 @@ uploads/
 exports/
 pdf-temp/
 *.tsbuildinfo
+.husky/_/

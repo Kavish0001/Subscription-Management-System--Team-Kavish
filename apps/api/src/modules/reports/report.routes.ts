@@ -1,6 +1,6 @@
+import { SubscriptionStatus } from '@prisma/client';
 import { Router } from 'express';
 
-import { SubscriptionStatus } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';

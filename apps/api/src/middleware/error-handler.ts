@@ -9,6 +9,8 @@ export function errorHandler(
   response: Response,
   _next: NextFunction,
 ) {
+  void _next;
+
   if (error instanceof ZodError) {
     return response.status(400).json({
       error: {

@@ -1,15 +1,14 @@
-import { Router } from 'express';
-
+import { Prisma } from '@prisma/client';
 import {
   discountRuleSchema,
   paginationSchema,
   productSchema,
   recurringPlanSchema
 } from '@subscription/shared';
-import { Prisma } from '@prisma/client';
+import { Router } from 'express';
 
 import { prisma } from '../../lib/prisma.js';
-import { requireAuth, requireRole } from '../../middleware/auth.js';
+import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middleware/auth.js';
 
 export const catalogRouter = Router();
 
@@ -110,7 +109,7 @@ catalogRouter.get('/discounts', requireRole('admin', 'internal_user'), async (_r
 catalogRouter.post('/discounts', requireRole('admin'), async (request, response, next) => {
   try {
     const payload = discountRuleSchema.parse(request.body);
-    const actorId = request.auth?.userId;
+    const actorId = (request as AuthenticatedRequest).auth?.userId;
 
     const discount = await prisma.discountRule.create({
       data: {

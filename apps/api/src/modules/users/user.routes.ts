@@ -1,7 +1,7 @@
-import { Router } from 'express';
-import argon2 from 'argon2';
-
 import { createInternalUserSchema } from '@subscription/shared';
+import argon2 from 'argon2';
+import { Router } from 'express';
+
 
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';

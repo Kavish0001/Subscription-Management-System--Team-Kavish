@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -b && vite build",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
     "dev": "vite",
     "lint": "eslint src --ext .ts,.tsx",
     "preview": "vite preview",
