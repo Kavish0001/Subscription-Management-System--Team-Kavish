@@ -536,8 +536,8 @@ export function ResourceListPage({
           </div>
         </div>
       ) : null}
-      <div className="overflow-hidden rounded-3xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
+      <div className="overflow-x-auto overflow-y-hidden rounded-3xl border border-white/10">
+        <table className="min-w-[720px] w-full text-left text-sm">
           <thead className="bg-white/6 text-slate-300">
             {resource === 'subscriptions' ? (
               <tr>

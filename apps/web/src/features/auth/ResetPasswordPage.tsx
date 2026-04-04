@@ -58,6 +58,7 @@ export function ResetPasswordPage() {
   });
 
   const title = useMemo(() => (isResetMode ? 'Set new password' : 'Forgot password'), [isResetMode]);
+  const hasExpiredLinkError = isResetMode && error === 'Reset link is invalid or expired';
 
   return (
     <AuthShell
@@ -83,12 +84,20 @@ export function ResetPasswordPage() {
             <input className="app-input" onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" value={email} />
           </label>
         )}
+        {isResetMode ? (
+          <p className="text-sm muted">Only the latest reset link works. If you requested a newer one, older links become invalid.</p>
+        ) : null}
         {message ? <MessageBanner tone="success">{message}</MessageBanner> : null}
         {error ? <MessageBanner tone="error">{error}</MessageBanner> : null}
         {!isResetMode && resetLink ? (
           <a className="app-btn app-btn-secondary justify-self-start" href={resetLink}>
             Open demo reset link
           </a>
+        ) : null}
+        {hasExpiredLinkError ? (
+          <Link className="app-btn app-btn-secondary justify-self-start" to="/reset-password">
+            Request New Link
+          </Link>
         ) : null}
         <div className="flex flex-wrap gap-3">
           <button

@@ -27,8 +27,8 @@ export function ReportsPage() {
       <MetricCard label="Revenue" value={formatCurrency(metrics?.revenue ?? 0)} detail="Total paid invoice amount." icon={<WalletIcon className="h-6 w-6" />} />
       <MetricCard label="Overdue" value={String(metrics?.overdueInvoices ?? 0)} detail="Invoices awaiting action." icon={<AlertTriangleIcon className="h-6 w-6" />} />
       <Surface title="Invoice register">
-        <div className="overflow-hidden rounded-3xl border border-white/10">
-          <table className="min-w-full text-left text-sm">
+        <div className="overflow-x-auto overflow-y-hidden rounded-3xl border border-white/10">
+          <table className="min-w-[820px] w-full text-left text-sm">
             <thead className="bg-white/6 text-slate-300">
               <tr>
                 <th className="px-4 py-3">Invoice</th>

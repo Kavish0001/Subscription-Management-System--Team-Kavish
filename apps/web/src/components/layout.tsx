@@ -28,8 +28,8 @@ export function Shell({
 }>) {
   return (
     <div className="app-shell">
-      <div className="grid min-h-screen lg:grid-cols-[272px_minmax(0,1fr)]">
-        <aside className="app-sidebar border-b p-5 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:border-r lg:border-b-0 lg:p-6">
+      <div className="min-h-screen lg:pl-[272px]">
+        <aside className="app-sidebar border-b p-0 lg:fixed lg:inset-y-0 lg:left-0 lg:z-20 lg:h-screen lg:w-[272px] lg:overflow-y-auto lg:border-r lg:border-b-0 lg:p-3">
           <BrandLockup
             caption="Connected subscription operations"
             sidebar
@@ -87,14 +87,14 @@ export function Shell({
           </nav>
         </aside>
         <main className="min-w-0 p-5 lg:p-8">
-          <header className="mb-6 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-end lg:justify-between">
+          <header className="mb-6 flex min-w-0 flex-col gap-4 lg:mb-8 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="eyebrow mb-3">{subtitle}</p>
               <h1 className="page-title">{title}</h1>
             </div>
             {toolbar}
           </header>
-          <section className="grid gap-5 xl:grid-cols-12">{children}</section>
+          <section className="grid min-w-0 gap-5 xl:grid-cols-12">{children}</section>
         </main>
       </div>
     </div>
@@ -126,7 +126,7 @@ export function MetricCard({
           : 'from-[var(--color-primary)] to-[var(--color-secondary)]';
 
   return (
-    <article className="app-panel xl:col-span-4">
+    <article className="app-panel min-w-0 xl:col-span-4">
       <div className="flex items-start justify-between gap-4 p-6">
         <div className="min-w-0">
           <p className="text-sm muted">{label}</p>
@@ -158,7 +158,7 @@ export function Surface({
   className?: string;
 }>) {
   return (
-    <article className={cn('app-panel p-5 lg:p-6 xl:col-span-12', className)}>
+    <article className={cn('app-panel min-w-0 p-5 lg:p-6 xl:col-span-12', className)}>
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="section-title">{title}</h2>

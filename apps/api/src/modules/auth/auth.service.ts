@@ -136,6 +136,19 @@ function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+function isProtectedAdminAccount(user: { email: string; role: UserRole }) {
+  return user.role === UserRole.admin && user.email === env.ADMIN_EMAIL.toLowerCase();
+}
+
+function shouldExposeResetLink() {
+  try {
+    const appUrl = new URL(env.APP_URL);
+    return appUrl.hostname === 'localhost' || appUrl.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
 export async function signup(input: unknown) {
   const payload = signupSchema.parse(input);
 
@@ -277,6 +290,10 @@ export async function requestPasswordReset(input: unknown) {
     throw new AppError('Account not exist', 404, 'ACCOUNT_NOT_FOUND');
   }
 
+  if (isProtectedAdminAccount(user)) {
+    throw new AppError('Password reset is disabled for the system admin account', 403, 'PASSWORD_RESET_DISABLED');
+  }
+
   const rawToken = randomBytes(32).toString('hex');
   const resetLink = `${env.APP_URL}/reset-password?token=${rawToken}`;
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
@@ -305,7 +322,8 @@ export async function requestPasswordReset(input: unknown) {
   await mailer.sendPasswordReset(user.email, resetLink);
 
   return {
-    message: 'The password reset link has been sent to your email.'
+    message: 'The password reset link has been sent to your email.',
+    resetLink: shouldExposeResetLink() ? resetLink : undefined
   };
 }
 
@@ -396,6 +414,10 @@ export async function confirmPasswordReset(input: unknown) {
 
   if (!user) {
     throw new AppError('Reset link is invalid or expired', 400, 'INVALID_RESET_TOKEN');
+  }
+
+  if (isProtectedAdminAccount(user)) {
+    throw new AppError('Password reset is disabled for the system admin account', 403, 'PASSWORD_RESET_DISABLED');
   }
 
   const passwordHash = await argon2.hash(payload.password);

@@ -20,8 +20,8 @@ export function LoginPage() {
   const form = useForm<LoginForm>({
     resolver: zodResolver(schema),
     defaultValues: {
-      email: 'admin@example.com',
-      password: 'Admin@1234'
+      email: '',
+      password: ''
     }
   });
 
@@ -50,11 +50,11 @@ export function LoginPage() {
         </div>
         <label className="grid gap-2 text-sm">
           <span className="muted">Email ID</span>
-          <input className="app-input" {...form.register('email')} type="email" />
+          <input className="app-input" autoCapitalize="none" autoComplete="username" spellCheck={false} {...form.register('email')} type="email" />
         </label>
         <label className="grid gap-2 text-sm">
           <span className="muted">Password</span>
-          <input className="app-input" {...form.register('password')} type="password" />
+          <input className="app-input" autoComplete="current-password" {...form.register('password')} type="password" />
         </label>
         {error ? <MessageBanner tone="error">{error}</MessageBanner> : null}
         <button

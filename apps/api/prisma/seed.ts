@@ -10,6 +10,7 @@ async function ensureUser(input: {
   password: string;
   name: string;
   role: UserRole;
+  emailVerifiedAt?: Date | null;
 }) {
   const existingUser = await prisma.user.findUnique({
     where: { email: input.email },
@@ -21,6 +22,13 @@ async function ensureUser(input: {
   });
 
   if (existingUser) {
+    await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        emailVerifiedAt: input.emailVerifiedAt ?? existingUser.emailVerifiedAt
+      }
+    });
+
     if (existingUser.contacts.length === 0) {
       await prisma.contact.create({
         data: {
@@ -54,6 +62,7 @@ async function ensureUser(input: {
       email: input.email,
       passwordHash,
       role: input.role,
+      emailVerifiedAt: input.emailVerifiedAt ?? null,
       contacts: {
         create: {
           name: input.name,
@@ -95,7 +104,8 @@ async function main() {
     email: adminEmail.toLowerCase(),
     password: adminPassword,
     name: adminName,
-    role: UserRole.admin
+    role: UserRole.admin,
+    emailVerifiedAt: new Date()
   });
 
   const salesUser = await ensureUser({

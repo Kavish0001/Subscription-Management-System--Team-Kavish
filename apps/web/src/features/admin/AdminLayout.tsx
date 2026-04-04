@@ -40,12 +40,12 @@ export function AdminLayout() {
       subtitle="Modular recurring revenue control"
       navigation={navigation}
       toolbar={
-        <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-          <div className="relative min-w-[260px] flex-1 lg:max-w-[360px] lg:flex-none">
+        <div className="flex min-w-0 flex-wrap items-center gap-3 lg:justify-end">
+          <div className="relative min-w-0 flex-1 basis-[260px] lg:max-w-[360px] lg:flex-none">
             <FolderStackIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-text-muted)]" />
             <ChevronDownIcon className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-text-muted)]" />
             <select
-              className="app-select min-w-[220px] appearance-none pl-11 pr-11"
+              className="app-select min-w-0 appearance-none pl-11 pr-11"
               defaultValue=""
               onChange={(event) => {
                 if (event.target.value) {
@@ -65,7 +65,7 @@ export function AdminLayout() {
           </div>
           <div className="app-pill inline-flex items-center gap-3 rounded-full px-4 py-2 text-sm">
             <ReceiptIcon className="h-4 w-4" />
-            <span>{user?.email ?? 'Unknown user'}</span>
+            <span className="truncate">{user?.email ?? 'Unknown user'}</span>
           </div>
           <Link className="app-btn app-btn-secondary" to="/">
             <HomeIcon className="h-4 w-4" />

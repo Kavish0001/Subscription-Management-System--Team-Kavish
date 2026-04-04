@@ -160,8 +160,8 @@ export function OrdersPage() {
 
   return (
     <Surface title="My Orders">
-      <div className="overflow-hidden rounded-3xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
+      <div className="overflow-x-auto overflow-y-hidden rounded-3xl border border-white/10">
+        <table className="min-w-[820px] w-full text-left text-sm">
           <thead className="bg-white/6 text-slate-300">
             <tr>
               <th className="px-4 py-3">Order</th>
@@ -503,8 +503,8 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
           <p className="text-slate-300">
             {subscription.customerContact.name} | {subscription.status} | {subscription.recurringPlan?.name ?? 'Recurring plan'}
           </p>
-          <div className="mt-5 overflow-hidden rounded-3xl border border-white/10">
-            <table className="min-w-full text-left text-sm">
+          <div className="mt-5 overflow-x-auto overflow-y-hidden rounded-3xl border border-white/10">
+            <table className="min-w-[720px] w-full text-left text-sm">
               <thead className="bg-white/6 text-slate-300">
                 <tr>
                   <th className="px-4 py-3">Product</th>
