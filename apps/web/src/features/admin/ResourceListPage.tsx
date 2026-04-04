@@ -23,11 +23,15 @@ export function ResourceListPage({
   const { token } = useSession();
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [productUploadKey, setProductUploadKey] = useState(0);
   const [productForm, setProductForm] = useState({
     name: '',
     slug: '',
     description: '',
-    imageUrl: '',
+    imageUrls: [] as string[],
+    selectedPlanIds: [] as string[],
+    defaultPlanId: '',
+    planOverrides: {} as Record<string, string>,
     baseSalesPrice: '999',
     costPrice: '249'
   });
@@ -59,7 +63,7 @@ export function ResourceListPage({
   const plansQuery = useQuery({
     queryKey: ['admin-plans'],
     queryFn: () => apiRequest<RecurringPlan[]>('/recurring-plans', { token }),
-    enabled: resource === 'recurring-plans'
+    enabled: resource === 'recurring-plans' || resource === 'products'
   });
 
   const discountsQuery = useQuery({
@@ -93,6 +97,12 @@ export function ResourceListPage({
   const createMutation = useMutation({
     mutationFn: async () => {
       if (resource === 'products') {
+        if (!productForm.selectedPlanIds.length) {
+          throw new ApiError('Select at least one recurring plan for the product.', 400);
+        }
+
+        const defaultPlanId = productForm.defaultPlanId || productForm.selectedPlanIds[0];
+
         return apiRequest('/products', {
           token,
           method: 'POST',
@@ -100,11 +110,18 @@ export function ResourceListPage({
             name: productForm.name,
             slug: productForm.slug || slugify(productForm.name),
             description: productForm.description,
-            imageUrl: productForm.imageUrl || undefined,
+            imageUrls: productForm.imageUrls.length ? productForm.imageUrls : undefined,
             productType: 'service',
             baseSalesPrice: Number(productForm.baseSalesPrice),
             costPrice: Number(productForm.costPrice),
-            isSubscriptionEnabled: true
+            isSubscriptionEnabled: true,
+            planPricing: productForm.selectedPlanIds.map((recurringPlanId) => ({
+              recurringPlanId,
+              overridePrice: productForm.planOverrides[recurringPlanId]
+                ? Number(productForm.planOverrides[recurringPlanId])
+                : undefined,
+              isDefaultPlan: recurringPlanId === defaultPlanId
+            }))
           })
         });
       }
@@ -149,10 +166,14 @@ export function ResourceListPage({
           name: '',
           slug: '',
           description: '',
-          imageUrl: '',
+          imageUrls: [],
+          selectedPlanIds: [],
+          defaultPlanId: '',
+          planOverrides: {},
           baseSalesPrice: '999',
           costPrice: '249'
         });
+        setProductUploadKey((value) => value + 1);
       }
       await queryClient.invalidateQueries({
         queryKey:
@@ -207,6 +228,89 @@ export function ResourceListPage({
     }
   });
 
+  const deleteSubscriptionMutation = useMutation({
+    mutationFn: async (subscriptionId: string) =>
+      apiRequest(`/subscriptions/${subscriptionId}`, {
+        token,
+        method: 'DELETE'
+      }),
+    onSuccess: async () => {
+      setError(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-subscriptions'] })
+      ]);
+    },
+    onError: (mutationError) => {
+      setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to delete subscription');
+    }
+  });
+
+  const handleProductPhotosSelected = async (files: FileList | null) => {
+    if (!files?.length) {
+      setProductForm((value) => ({ ...value, imageUrls: [] }));
+      return;
+    }
+
+    const selectedFiles = Array.from(files);
+
+    if (selectedFiles.length > 10) {
+      setError('You can upload up to 10 product photos.');
+      return;
+    }
+
+    if (selectedFiles.some((file) => !file.type.startsWith('image/'))) {
+      setError('Only image files can be uploaded for products.');
+      return;
+    }
+
+    try {
+      const imageUrls = await Promise.all(selectedFiles.map(readFileAsDataUrl));
+      setError(null);
+      setProductForm((value) => ({ ...value, imageUrls }));
+    } catch {
+      setError('Unable to read the selected photos. Try different image files.');
+    }
+  };
+
+  const removeProductPhoto = (index: number) => {
+    setProductForm((value) => ({
+      ...value,
+      imageUrls: value.imageUrls.filter((_, imageIndex) => imageIndex !== index)
+    }));
+  };
+
+  const toggleProductPlan = (plan: RecurringPlan, checked: boolean) => {
+    setProductForm((value) => {
+      if (checked) {
+        const selectedPlanIds = value.selectedPlanIds.includes(plan.id)
+          ? value.selectedPlanIds
+          : [...value.selectedPlanIds, plan.id];
+
+        return {
+          ...value,
+          selectedPlanIds,
+          defaultPlanId: value.defaultPlanId || plan.id,
+          planOverrides: value.planOverrides[plan.id]
+            ? value.planOverrides
+            : { ...value.planOverrides, [plan.id]: String(plan.price) }
+        };
+      }
+
+      const selectedPlanIds = value.selectedPlanIds.filter((entry) => entry !== plan.id);
+      const { [plan.id]: _removedOverride, ...planOverrides } = value.planOverrides;
+
+      return {
+        ...value,
+        selectedPlanIds,
+        defaultPlanId:
+          value.defaultPlanId === plan.id ? (selectedPlanIds[0] ?? '') : value.defaultPlanId,
+        planOverrides
+      };
+    });
+  };
+
   return (
     <Surface
       title={title}
@@ -241,25 +345,48 @@ export function ResourceListPage({
               <Field label="Slug">
                 <input className={fieldClass} onChange={(event) => setProductForm((value) => ({ ...value, slug: event.target.value }))} value={productForm.slug} />
               </Field>
-              <Field label="Image URL">
+              <Field className="md:col-span-2" label="Product photos">
                 <div className="grid gap-3">
                   <input
-                    className={fieldClass}
-                    onChange={(event) => setProductForm((value) => ({ ...value, imageUrl: event.target.value }))}
-                    placeholder="https://example.com/product-image.jpg"
-                    value={productForm.imageUrl}
+                    accept="image/*"
+                    className="rounded-2xl border border-dashed border-white/15 bg-slate-950/40 px-4 py-3 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-gradient-to-r file:from-emerald-300 file:to-sky-400 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-950"
+                    key={productUploadKey}
+                    multiple
+                    onChange={(event) => {
+                      void handleProductPhotosSelected(event.target.files);
+                    }}
+                    type="file"
                   />
-                  {productForm.imageUrl ? (
-                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/30 p-2">
-                      <img
-                        alt={productForm.name || 'Product preview'}
-                        className="h-36 w-full rounded-xl object-cover"
-                        src={productForm.imageUrl}
-                      />
+                  <p className="text-xs text-slate-400">Upload up to 10 photos. The first photo becomes the cover image, and the portal uses all uploaded photos as a slideshow.</p>
+                  {productForm.imageUrls.length ? (
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      {productForm.imageUrls.map((imageUrl, index) => (
+                        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/30 p-2" key={imageUrl}>
+                          <img
+                            alt={`${productForm.name || 'Product'} preview ${index + 1}`}
+                            className="h-32 w-full rounded-xl object-cover"
+                            src={imageUrl}
+                          />
+                          <div className="absolute inset-x-3 top-3 flex items-center justify-between">
+                            {index === 0 ? (
+                              <span className="rounded-full bg-emerald-300 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-950">
+                                Cover
+                              </span>
+                            ) : (
+                              <span />
+                            )}
+                            <button
+                              className="rounded-full bg-slate-950/75 px-2 py-1 text-[10px] font-semibold text-white"
+                              onClick={() => removeProductPhoto(index)}
+                              type="button"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
-                    <p className="text-xs text-slate-400">Paste a public image link to show the product image in the shop cards.</p>
-                  )}
+                  ) : null}
                 </div>
               </Field>
               <Field label="Description">
@@ -270,6 +397,76 @@ export function ResourceListPage({
               </Field>
               <Field label="Cost price">
                 <input className={fieldClass} onChange={(event) => setProductForm((value) => ({ ...value, costPrice: event.target.value }))} type="number" value={productForm.costPrice} />
+              </Field>
+              <Field className="md:col-span-2" label="Recurring plans">
+                {plansQuery.data?.length ? (
+                  <div className="grid gap-3">
+                    <p className="text-xs text-slate-400">Choose one or more plans. The default plan is preselected in the portal dropdown.</p>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      {plansQuery.data.map((plan) => {
+                        const isSelected = productForm.selectedPlanIds.includes(plan.id);
+
+                        return (
+                          <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-4" key={plan.id}>
+                            <div className="flex items-start justify-between gap-3">
+                              <label className="flex items-start gap-3">
+                                <input
+                                  checked={isSelected}
+                                  className="mt-1 h-4 w-4"
+                                  onChange={(event) => toggleProductPlan(plan, event.target.checked)}
+                                  type="checkbox"
+                                />
+                                <span>
+                                  <span className="block font-semibold text-white">{plan.name}</span>
+                                  <span className="text-xs text-slate-400">
+                                    {plan.intervalCount} {plan.intervalUnit} • {formatCurrency(plan.price)}
+                                  </span>
+                                </span>
+                              </label>
+                              {isSelected ? (
+                                <label className="flex items-center gap-2 text-xs text-slate-300">
+                                  <input
+                                    checked={productForm.defaultPlanId === plan.id}
+                                    className="h-4 w-4"
+                                    name="defaultPlanId"
+                                    onChange={() => setProductForm((value) => ({ ...value, defaultPlanId: plan.id }))}
+                                    type="radio"
+                                  />
+                                  Default
+                                </label>
+                              ) : null}
+                            </div>
+                            {isSelected ? (
+                              <div className="mt-3">
+                                <label className="grid gap-2 text-xs text-slate-300">
+                                  Override price
+                                  <input
+                                    className={fieldClass}
+                                    onChange={(event) =>
+                                      setProductForm((value) => ({
+                                        ...value,
+                                        planOverrides: {
+                                          ...value.planOverrides,
+                                          [plan.id]: event.target.value
+                                        }
+                                      }))
+                                    }
+                                    type="number"
+                                    value={productForm.planOverrides[plan.id] ?? ''}
+                                  />
+                                </label>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/30 px-4 py-4 text-sm text-slate-400">
+                    Create recurring plans first, then attach them to products here.
+                  </div>
+                )}
               </Field>
             </div>
           ) : null}
@@ -438,6 +635,17 @@ export function ResourceListPage({
                               Cancel
                             </button>
                           ) : null}
+                          <button
+                            className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200"
+                            onClick={() => {
+                              if (window.confirm(`Delete subscription ${subscription.subscriptionNumber}? This also removes its invoices and payments.`)) {
+                                deleteSubscriptionMutation.mutate(subscription.id);
+                              }
+                            }}
+                            type="button"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -458,9 +666,9 @@ export function ResourceListPage({
   );
 }
 
-function Field({ children, label }: { children: React.ReactNode; label: string }) {
+function Field({ children, className = '', label }: { children: React.ReactNode; className?: string; label: string }) {
   return (
-    <label className="grid gap-2 text-sm text-slate-200">
+    <label className={`grid gap-2 text-sm text-slate-200 ${className}`}>
       {label}
       {children}
     </label>
@@ -473,6 +681,22 @@ function slugify(value: string) {
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error('Unable to read file'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read file'));
+    reader.readAsDataURL(file);
+  });
 }
 
 const fieldClass = 'rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3';

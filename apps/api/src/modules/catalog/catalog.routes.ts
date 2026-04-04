@@ -44,6 +44,13 @@ catalogRouter.get('/products', async (request, response, next) => {
 catalogRouter.post('/products', requireRole('admin', 'internal_user'), async (request, response, next) => {
   try {
     const payload = productSchema.parse(request.body);
+    const imageUrls = [
+      ...new Set(
+        [payload.imageUrl, ...(payload.imageUrls ?? [])].filter(
+          (value): value is string => Boolean(value),
+        ),
+      ),
+    ].slice(0, 10);
 
     const product = await prisma.product.create({
       data: {
@@ -55,7 +62,20 @@ catalogRouter.post('/products', requireRole('admin', 'internal_user'), async (re
         costPrice: new Prisma.Decimal(payload.costPrice),
         categoryId: payload.categoryId,
         isSubscriptionEnabled: payload.isSubscriptionEnabled,
-        imageUrl: payload.imageUrl
+        imageUrl: imageUrls[0],
+        imageUrls,
+        planPricing: payload.planPricing?.length
+          ? {
+              create: payload.planPricing.map((pricing) => ({
+                recurringPlanId: pricing.recurringPlanId,
+                overridePrice:
+                  pricing.overridePrice !== undefined
+                    ? new Prisma.Decimal(pricing.overridePrice)
+                    : undefined,
+                isDefaultPlan: pricing.isDefaultPlan,
+              })),
+            }
+          : undefined,
       }
     });
 

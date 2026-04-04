@@ -161,6 +161,10 @@ export async function login(input: unknown) {
     throw new AppError('Account not exist', 404, 'ACCOUNT_NOT_FOUND');
   }
 
+  if (!user.isActive) {
+    throw new AppError('Account is inactive', 403, 'ACCOUNT_INACTIVE');
+  }
+
   const passwordMatches = await argon2.verify(user.passwordHash, payload.password);
   if (!passwordMatches) {
     throw new AppError('Invalid password', 401, 'INVALID_PASSWORD');

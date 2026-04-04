@@ -168,7 +168,11 @@ async function main() {
       costPrice: 249,
       categoryId: category.id,
       isSubscriptionEnabled: true,
-      imageUrl: 'https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=900&q=80'
+      imageUrl: 'https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=900&q=80',
+      imageUrls: [
+        'https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=900&q=80',
+        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80'
+      ]
     },
     create: {
       name: 'Starter Subscription',
@@ -179,7 +183,11 @@ async function main() {
       costPrice: 249,
       categoryId: category.id,
       isSubscriptionEnabled: true,
-      imageUrl: 'https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=900&q=80'
+      imageUrl: 'https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=900&q=80',
+      imageUrls: [
+        'https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=900&q=80',
+        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80'
+      ]
     }
   });
 
@@ -193,7 +201,11 @@ async function main() {
       costPrice: 799,
       categoryId: category.id,
       isSubscriptionEnabled: true,
-      imageUrl: 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=900&q=80'
+      imageUrl: 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=900&q=80',
+      imageUrls: [
+        'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=900&q=80',
+        'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=900&q=80'
+      ]
     },
     create: {
       name: 'Growth Subscription',
@@ -204,7 +216,11 @@ async function main() {
       costPrice: 799,
       categoryId: category.id,
       isSubscriptionEnabled: true,
-      imageUrl: 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=900&q=80'
+      imageUrl: 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=900&q=80',
+      imageUrls: [
+        'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=900&q=80',
+        'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=900&q=80'
+      ]
     }
   });
 

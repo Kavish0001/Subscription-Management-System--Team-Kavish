@@ -162,6 +162,7 @@ model Product {
   isSubscriptionEnabled Boolean                 @default(true) @map("is_subscription_enabled")
   isActive              Boolean                 @default(true) @map("is_active")
   imageUrl              String?                 @map("image_url")
+  imageUrls             String[]                @default([]) @map("image_urls")
   createdAt             DateTime                @default(now()) @map("created_at")
   updatedAt             DateTime                @updatedAt @map("updated_at")
   category              ProductCategory?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)

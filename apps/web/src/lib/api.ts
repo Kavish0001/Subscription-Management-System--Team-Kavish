@@ -60,6 +60,7 @@ export type Product = {
   baseSalesPrice: string | number;
   costPrice: string | number;
   imageUrl: string | null;
+  imageUrls: string[];
   isSubscriptionEnabled: boolean;
   createdAt?: string;
   category?: {

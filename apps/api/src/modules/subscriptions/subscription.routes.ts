@@ -273,6 +273,88 @@ subscriptionsRouter.get('/:id', async (request, response, next) => {
   }
 });
 
+subscriptionsRouter.delete('/:id', requireRole('admin', 'internal_user'), async (request, response, next) => {
+  try {
+    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+
+    const existing = await prisma.subscriptionOrder.findUnique({
+      where: { id },
+      include: {
+        invoices: {
+          include: {
+            payments: true,
+            lines: true,
+          },
+        },
+        lines: {
+          include: {
+            taxes: true,
+            invoiceLines: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
+    }
+
+    await prisma.$transaction(async (transaction) => {
+      for (const invoice of existing.invoices) {
+        if (invoice.payments.length) {
+          await transaction.payment.deleteMany({
+            where: {
+              invoiceId: invoice.id,
+            },
+          });
+        }
+
+        if (invoice.lines.length) {
+          await transaction.invoiceLine.deleteMany({
+            where: {
+              invoiceId: invoice.id,
+            },
+          });
+        }
+      }
+
+      if (existing.invoices.length) {
+        await transaction.invoice.deleteMany({
+          where: {
+            subscriptionOrderId: existing.id,
+          },
+        });
+      }
+
+      for (const line of existing.lines) {
+        if (line.taxes.length) {
+          await transaction.subscriptionOrderLineTax.deleteMany({
+            where: {
+              subscriptionOrderLineId: line.id,
+            },
+          });
+        }
+      }
+
+      if (existing.lines.length) {
+        await transaction.subscriptionOrderLine.deleteMany({
+          where: {
+            subscriptionOrderId: existing.id,
+          },
+        });
+      }
+
+      await transaction.subscriptionOrder.delete({
+        where: { id: existing.id },
+      });
+    });
+
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user'), async (request, response, next) => {
   try {
     const authRequest = request as AuthenticatedRequest;

@@ -8,6 +8,19 @@ import {
   userRoles,
 } from './enums.js';
 
+const productImageSchema = z.string().refine((value) => {
+  if (value.startsWith('data:image/')) {
+    return true;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}, 'Product images must be uploaded files or valid HTTP URLs');
+
 export const paginationSchema = z.object({
   page: z.coerce.number().min(1).default(1),
   pageSize: z.coerce.number().min(1).max(100).default(20),
@@ -53,7 +66,18 @@ export const productSchema = z.object({
   costPrice: z.number().nonnegative(),
   categoryId: z.string().uuid().optional(),
   isSubscriptionEnabled: z.boolean().default(true),
-  imageUrl: z.string().url().optional(),
+  imageUrl: productImageSchema.optional(),
+  imageUrls: z.array(productImageSchema).max(10).optional(),
+  planPricing: z
+    .array(
+      z.object({
+        recurringPlanId: z.string().uuid(),
+        overridePrice: z.number().nonnegative().optional(),
+        isDefaultPlan: z.boolean().default(false),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 export const recurringPlanSchema = z.object({

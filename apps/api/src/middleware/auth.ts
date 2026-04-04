@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 
 import { env } from '../config/env.js';
 import { AppError } from '../lib/errors.js';
+import { prisma } from '../lib/prisma.js';
 
 export type AuthContext = {
   userId: string;
@@ -21,7 +22,7 @@ type TokenPayload = {
   role: UserRole;
 };
 
-export function requireAuth(request: Request, _response: Response, next: NextFunction) {
+export async function requireAuth(request: Request, _response: Response, next: NextFunction) {
   const authRequest = request as AuthenticatedRequest;
   const authHeader = request.headers.authorization;
   const token = authHeader?.replace(/^Bearer\s+/i, '') ?? request.cookies.accessToken;
@@ -32,10 +33,24 @@ export function requireAuth(request: Request, _response: Response, next: NextFun
 
   try {
     const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as TokenPayload;
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isActive: true
+      }
+    });
+
+    if (!user || !user.isActive) {
+      return next(new AppError('Account is inactive or unavailable', 401));
+    }
+
     authRequest.auth = {
-      userId: payload.sub,
-      email: payload.email,
-      role: payload.role
+      userId: user.id,
+      email: user.email,
+      role: user.role
     };
     return next();
   } catch {
