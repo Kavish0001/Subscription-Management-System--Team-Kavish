@@ -67,8 +67,8 @@ export function VerifyOtpPage() {
           <h2 className="section-title mt-3">Enter verification code</h2>
         </div>
 
-        <label className="grid gap-2 text-sm">
-          <span className="muted">Verification Code</span>
+        <label className="app-label">
+          <span>Verification Code</span>
           <input
             className="app-input text-center text-2xl tracking-[1em] font-mono"
             maxLength={6}
@@ -76,7 +76,7 @@ export function VerifyOtpPage() {
             {...form.register('otp')}
           />
           {form.formState.errors.otp ? (
-            <span className="text-sm text-red-300">{form.formState.errors.otp.message}</span>
+            <span className="app-error">{form.formState.errors.otp.message}</span>
           ) : null}
         </label>
 
@@ -94,7 +94,7 @@ export function VerifyOtpPage() {
         <div className="pt-2 text-center text-sm">
           <p className="muted mb-2">Didn't receive the code?</p>
           <button
-            className="text-[color:var(--color-secondary)] font-medium hover:underline"
+            className="font-semibold text-[color:var(--color-primary-strong)] hover:underline"
             onClick={onResend}
             type="button"
           >
@@ -102,8 +102,8 @@ export function VerifyOtpPage() {
           </button>
         </div>
 
-        <div className="pt-4 text-center text-sm border-t border-slate-800">
-          <Link className="muted hover:text-white" to="/login">
+        <div className="border-t border-[color:var(--color-border)] pt-4 text-center text-sm">
+          <Link className="muted hover:text-[color:var(--color-text-primary)]" to="/login">
             Back to login
           </Link>
         </div>

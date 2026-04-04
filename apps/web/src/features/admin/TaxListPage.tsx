@@ -6,7 +6,7 @@ import { apiRequest, formatCurrency, formatDate, type TaxRule } from '../../lib/
 import { ApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
 
-const fieldClass = 'rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3';
+const fieldClass = 'app-input';
 
 export function TaxListPage() {
   const queryClient = useQueryClient();
@@ -78,37 +78,37 @@ export function TaxListPage() {
       title="Taxes"
       description="Configure fixed or percentage tax rules and attach them to products."
     >
-      {error ? <p className="mb-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
+      {error ? <p className="theme-message theme-message-error mb-4">{error}</p> : null}
       <div className="mb-5">
         <input className={fieldClass} onChange={(event) => setSearch(event.target.value)} placeholder="Search taxes" value={search} />
       </div>
-      <div className="mb-6 grid gap-4 rounded-[28px] border border-white/10 bg-slate-950/35 p-5 md:grid-cols-2 xl:grid-cols-4">
-        <label className="grid gap-2 text-sm text-slate-200">
+      <div className="app-card mb-6 grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
+        <label className="app-label">
           Tax name
           <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} value={form.name} />
         </label>
-        <label className="grid gap-2 text-sm text-slate-200">
+        <label className="app-label">
           Computation
           <select className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, computation: event.target.value as 'percentage' | 'fixed' }))} value={form.computation}>
             <option value="percentage">Percentage</option>
             <option value="fixed">Fixed price</option>
           </select>
         </label>
-        <label className="grid gap-2 text-sm text-slate-200">
+        <label className="app-label">
           Amount
           <input className={fieldClass} min="0" onChange={(event) => setForm((value) => ({ ...value, amount: event.target.value }))} type="number" value={form.amount} />
         </label>
-        <label className="grid gap-2 text-sm text-slate-200">
+        <label className="app-label">
           Tax type
           <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, taxType: event.target.value }))} value={form.taxType} />
         </label>
-        <button className="rounded-full bg-gradient-to-r from-emerald-300 to-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 md:col-span-2 xl:col-span-4 xl:justify-self-start" onClick={() => createMutation.mutate()} type="button">
+        <button className="app-btn app-btn-primary md:col-span-2 xl:col-span-4 xl:justify-self-start" onClick={() => createMutation.mutate()} type="button">
           Save tax
         </button>
       </div>
-      <div className="overflow-x-auto overflow-y-hidden rounded-3xl border border-white/10">
-        <table className="min-w-[820px] w-full text-left text-sm">
-          <thead className="bg-white/6 text-slate-300">
+      <div className="table-shell">
+        <table className="app-table min-w-[820px] text-left text-sm">
+          <thead>
             <tr>
               <th className="px-4 py-3">Tax Name</th>
               <th className="px-4 py-3">Computation</th>
@@ -120,23 +120,23 @@ export function TaxListPage() {
           </thead>
           <tbody>
             {rows.map((tax) => (
-              <tr className="border-t border-white/10 text-slate-100" key={tax.id}>
+              <tr key={tax.id}>
                 <td className="px-4 py-3">{tax.name}</td>
                 <td className="px-4 py-3 capitalize">{tax.computation}</td>
                 <td className="px-4 py-3">
                   {tax.computation === 'fixed' ? formatCurrency(tax.amount ?? tax.ratePercent) : `${tax.amount ?? tax.ratePercent}%`}
                 </td>
                 <td className="px-4 py-3">{tax.taxType}</td>
-                <td className="px-4 py-3 text-slate-300">{formatDate(tax.updatedAt ?? tax.createdAt)}</td>
+                <td className="px-4 py-3 muted">{formatDate(tax.updatedAt ?? tax.createdAt)}</td>
                 <td className="px-4 py-3">
-                  <button className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200" onClick={() => deleteMutation.mutate(tax.id)} type="button">
+                  <button className="app-btn app-btn-danger px-3 py-1 text-xs" onClick={() => deleteMutation.mutate(tax.id)} type="button">
                     Delete
                   </button>
                 </td>
               </tr>
             ))}
             {rows.length === 0 ? (
-              <tr className="border-t border-white/10 text-slate-400">
+              <tr>
                 <td className="px-4 py-6" colSpan={6}>No taxes yet.</td>
               </tr>
             ) : null}

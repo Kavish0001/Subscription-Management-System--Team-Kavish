@@ -61,24 +61,28 @@ export function ResetPasswordPage() {
   return (
     <AuthShell
       eyebrow={isResetMode ? 'Reset password' : 'Reset access'}
-      title={title}
+      title={isResetMode ? 'Reset password' : title}
       description="Password recovery keeps the access flow simple without exposing subscription operations to unauthorized users."
     >
-      <div className="grid gap-4">
+      <div className="auth-form-stack grid gap-4">
+        <div className="mb-1">
+          <p className="eyebrow">{isResetMode ? 'Password recovery' : 'Reset access'}</p>
+          <h2 className="section-title mt-3">{isResetMode ? 'Create a new password' : 'Forgot password'}</h2>
+        </div>
         {isResetMode ? (
           <>
-            <label className="grid gap-2 text-sm">
-              <span className="muted">New Password</span>
+            <label className="app-label">
+              <span>New Password</span>
               <input className="app-input" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
             </label>
-            <label className="grid gap-2 text-sm">
-              <span className="muted">Re-enter Password</span>
+            <label className="app-label">
+              <span>Re-enter Password</span>
               <input className="app-input" onChange={(event) => setConfirmPassword(event.target.value)} type="password" value={confirmPassword} />
             </label>
           </>
         ) : (
-          <label className="grid gap-2 text-sm">
-            <span className="muted">Enter Email ID</span>
+          <label className="app-label">
+            <span>Enter Email ID</span>
             <input className="app-input" onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" value={email} />
           </label>
         )}
@@ -101,7 +105,7 @@ export function ResetPasswordPage() {
           >
             {isSubmitting ? (
               <>
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-[color:rgba(2,6,23,0.18)] border-t-[color:var(--color-text-primary)]" />
                 {isResetMode ? 'Updating...' : 'Sending...'}
               </>
             ) : isResetMode ? (

@@ -5,6 +5,7 @@ import type { UserRole } from '@subscription/shared';
 import { confirmPasswordReset, login, logout, refreshSession, requestPasswordReset, signup, verifyOtp, resendOtp } from './auth.service.js';
 import { AppError } from '../../lib/errors.js';
 import { env } from '../../config/env.js';
+import { prisma } from '../../lib/prisma.js';
 
 const accessCookieName = 'accessToken';
 const refreshCookieName = 'refreshToken';
@@ -151,13 +152,35 @@ authRouter.get('/me', async (request, response) => {
       email: string;
       role: UserRole;
     };
+    const user = await prisma.user.findUnique({
+      where: { id: String(payload.sub) },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true
+      }
+    });
+
+    if (!user || !user.isActive) {
+      clearAccessCookie(response);
+
+      return response.json({
+        data: {
+          user: null,
+          canRefresh: Boolean(refreshToken)
+        }
+      });
+    }
 
     return response.json({
       data: {
         user: {
-          userId: String(payload.sub),
-          email: payload.email,
-          role: payload.role
+          userId: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
         },
         canRefresh: Boolean(refreshToken)
       }

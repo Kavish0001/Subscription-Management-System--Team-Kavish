@@ -15,13 +15,13 @@ const highlights = [
     icon: CubeIcon
   },
   {
-    title: 'Profile control',
-    detail: 'Addresses, contact details, orders, and invoices stay available in one customer-facing space.',
+    title: 'Account control',
+    detail: 'Profile details, addresses, orders, and invoices stay available in one customer-facing space.',
     icon: UsersIcon
   }
 ];
 
-const quickLinks = [
+const baseQuickLinks = [
   {
     title: 'Browse subscriptions',
     detail: 'Open the shop and compare recurring offers.',
@@ -30,7 +30,7 @@ const quickLinks = [
   },
   {
     title: 'Manage account',
-    detail: 'Update profile, addresses, and company details.',
+    detail: 'Open your account workspace for profile, address, and billing details.',
     to: '/account/profile',
     icon: UsersIcon
   },
@@ -62,9 +62,9 @@ export function HomePage() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 className="inline-flex items-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
-                to={isAuthenticated ? '/shop' : '/signup'}
+                to="/shop"
               >
-                {isAuthenticated ? 'Open shop' : 'Create account'}
+                Open shop
               </Link>
               <Link
                 className="inline-flex items-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
@@ -79,7 +79,7 @@ export function HomePage() {
             <div className="rounded-[28px] border border-emerald-100 bg-emerald-50/70 p-5 sm:col-span-2">
               <p className="text-sm font-semibold text-emerald-700">Current portal focus</p>
               <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-slate-950">
-                {isAuthenticated ? `Welcome back, ${user?.email}` : 'Sign in to shop subscription products'}
+                {isAuthenticated ? `Welcome back, ${user?.email}` : 'Browse subscription products without signing in'}
               </h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
                 Pricing, billing cadence, and plan details stay aligned on the shop page so the portal reflects the recurring model directly.
@@ -103,14 +103,14 @@ export function HomePage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
-        {quickLinks.map((item) => {
+        {baseQuickLinks.map((item) => {
           const Icon = item.icon;
 
           return (
             <Link
               className="group rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.06)] transition hover:-translate-y-1 hover:border-emerald-200"
               key={item.title}
-              to={isAuthenticated ? item.to : '/login'}
+              to={item.to === '/shop' || isAuthenticated ? item.to : '/login'}
             >
               <div className="inline-flex rounded-2xl bg-slate-950 p-3 text-white">
                 <Icon className="h-5 w-5" />

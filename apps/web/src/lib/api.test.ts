@@ -22,8 +22,18 @@ describe('web api helpers', () => {
   });
 
   it('normalizes session user ids from both shapes', () => {
-    expect(normalizeSessionUser({ id: '1', email: 'a@b.com', role: 'admin' }).id).toBe('1');
-    expect(normalizeSessionUser({ userId: '2', email: 'a@b.com', role: 'portal_user' }).id).toBe('2');
+    expect(normalizeSessionUser({ id: '1', email: 'a@b.com', name: 'Admin', role: 'admin' })).toEqual({
+      id: '1',
+      email: 'a@b.com',
+      name: 'Admin',
+      role: 'admin'
+    });
+    expect(normalizeSessionUser({ userId: '2', email: 'a@b.com', role: 'portal_user' })).toEqual({
+      id: '2',
+      email: 'a@b.com',
+      name: null,
+      role: 'portal_user'
+    });
   });
 
   it('returns parsed data from successful requests', async () => {

@@ -29,8 +29,8 @@ export function SignupPage() {
   return (
     <AuthShell
       eyebrow="Portal onboarding"
-      title=" subscription-ready"
-      description="Start with the portal."
+      title="Subscription-ready onboarding"
+      description="Create a clean portal identity for billing, subscriptions, and account access."
     >
       <form
         className="grid gap-4"
@@ -57,35 +57,35 @@ export function SignupPage() {
           <p className="eyebrow">Create account</p>
           <h2 className="section-title mt-3">Provision your portal identity</h2>
         </div>
-        <label className="grid gap-2 text-sm">
-          <span className="muted">Name</span>
+        <label className="app-label">
+          <span>Name</span>
           <input className="app-input" {...form.register('name')} />
           {form.formState.errors.name ? (
-            <span className="text-sm text-red-300">{form.formState.errors.name.message}</span>
+            <span className="app-error">{form.formState.errors.name.message}</span>
           ) : null}
         </label>
-        <label className="grid gap-2 text-sm">
-          <span className="muted">Email ID</span>
+        <label className="app-label">
+          <span>Email ID</span>
           <input className="app-input" {...form.register('email')} type="email" />
           {form.formState.errors.email ? (
-            <span className="text-sm text-red-300">{form.formState.errors.email.message}</span>
+            <span className="app-error">{form.formState.errors.email.message}</span>
           ) : null}
         </label>
-        <label className="grid gap-2 text-sm">
-          <span className="muted">Password</span>
+        <label className="app-label">
+          <span>Password</span>
           <input className="app-input" {...form.register('password')} type="password" />
-          <span className="text-xs muted">
+          <span className="app-help">
             Use at least 9 characters with uppercase, lowercase, and a special character.
           </span>
           {form.formState.errors.password ? (
-            <span className="text-sm text-red-300">{form.formState.errors.password.message}</span>
+            <span className="app-error">{form.formState.errors.password.message}</span>
           ) : null}
         </label>
-        <label className="grid gap-2 text-sm">
-          <span className="muted">Re-enter Password</span>
+        <label className="app-label">
+          <span>Re-enter Password</span>
           <input className="app-input" onChange={(event) => setConfirmPassword(event.target.value)} type="password" value={confirmPassword} />
           {error === 'Passwords do not match' ? (
-            <span className="text-sm text-red-300">Passwords do not match</span>
+            <span className="app-error">Passwords do not match</span>
           ) : null}
         </label>
         {error ? <MessageBanner tone="error">{error}</MessageBanner> : null}
@@ -97,7 +97,7 @@ export function SignupPage() {
           Sign up
         </button>
         <div className="pt-1 text-center text-sm">
-          <Link className="text-[color:var(--color-secondary)]" to="/login">
+          <Link className="font-semibold text-[color:var(--color-primary-strong)]" to="/login">
             Already have an account?
           </Link>
         </div>

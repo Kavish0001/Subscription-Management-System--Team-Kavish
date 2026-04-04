@@ -2,8 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 import { AlertTriangleIcon, FolderStackIcon, ReceiptIcon, WalletIcon } from '../../components/icons';
-import { MetricCard, Surface } from '../../components/layout';
-import { apiRequest, formatCurrency, formatDate, type DashboardMetrics, type Invoice, type PaginatedResponse, type Subscription } from '../../lib/api';
+import { MetricCard, StatusBadge, Surface } from '../../components/layout';
+import {
+  apiRequest,
+  formatCurrency,
+  formatDate,
+  type DashboardMetrics,
+  type Invoice,
+  type PaginatedResponse,
+  type Subscription
+} from '../../lib/api';
 import { useSession } from '../../lib/session';
 
 export function DashboardPage() {
@@ -51,10 +59,7 @@ export function DashboardPage() {
       />
       <Surface
         actions={
-          <Link
-            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950"
-            to="/admin/subscriptions/new"
-          >
+          <Link className="app-btn app-btn-primary" to="/admin/subscriptions/new">
             <FolderStackIcon className="h-4 w-4" />
             New subscription
           </Link>
@@ -62,57 +67,60 @@ export function DashboardPage() {
         title="Recent activity"
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
-              <FolderStackIcon className="h-4 w-4 text-cyan-300" />
+          <div className="app-card p-5">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[color:var(--color-text-primary)]">
+              <FolderStackIcon className="h-4 w-4 text-[color:var(--color-primary-strong)]" />
               <p>Recent subscriptions</p>
             </div>
             <div className="grid gap-3">
               {recentSubscriptions.map((subscription) => (
-                <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3" key={subscription.id}>
+                <div className="app-soft-panel px-4 py-3" key={subscription.id}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-white">{subscription.subscriptionNumber}</p>
-                      <p className="text-sm text-slate-300">{subscription.customerContact.name}</p>
+                      <p className="font-semibold text-[color:var(--color-text-primary)]">
+                        {subscription.subscriptionNumber}
+                      </p>
+                      <p className="text-sm muted">{subscription.customerContact.name}</p>
                     </div>
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-300">
-                      {subscription.status}
-                    </span>
+                    <StatusBadge status={subscription.status} />
                   </div>
-                  <p className="mt-2 text-sm text-slate-400">
-                    {formatDate(subscription.createdAt)} • {formatCurrency(subscription.totalAmount)}
+                  <p className="mt-2 text-sm muted">
+                    {formatDate(subscription.createdAt)} | {formatCurrency(subscription.totalAmount)}
                   </p>
                 </div>
               ))}
               {recentSubscriptions.length === 0 ? (
-                <p className="text-sm text-slate-400">No subscriptions yet.</p>
+                <p className="text-sm muted">No subscriptions yet.</p>
               ) : null}
             </div>
           </div>
-          <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
-              <ReceiptIcon className="h-4 w-4 text-cyan-300" />
+
+          <div className="app-card p-5">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[color:var(--color-text-primary)]">
+              <ReceiptIcon className="h-4 w-4 text-[color:var(--color-primary-strong)]" />
               <p>Recent invoices</p>
             </div>
             <div className="grid gap-3">
               {recentInvoices.map((invoice) => (
-                <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3" key={invoice.id}>
+                <div className="app-soft-panel px-4 py-3" key={invoice.id}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-white">{invoice.invoiceNumber}</p>
-                      <p className="text-sm text-slate-300">{invoice.subscriptionOrder?.subscriptionNumber ?? 'Subscription'}</p>
+                      <p className="font-semibold text-[color:var(--color-text-primary)]">
+                        {invoice.invoiceNumber}
+                      </p>
+                      <p className="text-sm muted">
+                        {invoice.subscriptionOrder?.subscriptionNumber ?? 'Subscription'}
+                      </p>
                     </div>
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-emerald-300">
-                      {invoice.status}
-                    </span>
+                    <StatusBadge status={invoice.status} />
                   </div>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Due {formatDate(invoice.dueDate)} • {formatCurrency(invoice.totalAmount)}
+                  <p className="mt-2 text-sm muted">
+                    Due {formatDate(invoice.dueDate)} | {formatCurrency(invoice.totalAmount)}
                   </p>
                 </div>
               ))}
               {recentInvoices.length === 0 ? (
-                <p className="text-sm text-slate-400">No invoices generated yet.</p>
+                <p className="text-sm muted">No invoices generated yet.</p>
               ) : null}
             </div>
           </div>

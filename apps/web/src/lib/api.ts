@@ -3,6 +3,7 @@ const API_URL = (import.meta.env.VITE_API_URL?.trim() || '/api/v1').replace(/\/$
 export type SessionUser = {
   id: string;
   email: string;
+  name: string | null;
   role: 'admin' | 'internal_user' | 'portal_user';
 };
 
@@ -386,6 +387,28 @@ export type Invoice = InvoiceSummary & {
   };
 };
 
+export type RazorpayOrder = {
+  purpose: 'checkout' | 'invoice';
+  keyId: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  merchantName: string;
+  description: string;
+  customer: {
+    name: string;
+    email: string | null;
+    contact: string | null;
+  };
+  subscriptionIds: string[];
+  invoiceIds: string[];
+};
+
+export type RazorpayVerificationResult = {
+  subscriptionIds: string[];
+  invoiceIds: string[];
+};
+
 export type DashboardMetrics = {
   activeSubscriptions: number;
   invoicesPaid: number;
@@ -485,12 +508,13 @@ export function planIntervalLabel(plan: Pick<RecurringPlan, 'intervalCount' | 'i
 
 export function normalizeSessionUser(
   input:
-    | { id: string; email: string; role: SessionUser['role'] }
-    | { userId: string; email: string; role: SessionUser['role'] },
+    | { id: string; email: string; name?: string | null; role: SessionUser['role'] }
+    | { userId: string; email: string; name?: string | null; role: SessionUser['role'] },
 ): SessionUser {
   return {
     id: 'id' in input ? input.id : input.userId,
     email: input.email,
+    name: input.name ?? null,
     role: input.role
   };
 }

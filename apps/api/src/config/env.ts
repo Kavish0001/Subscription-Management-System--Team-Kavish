@@ -19,7 +19,9 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_SECURE: z.preprocess((val) => val === 'true' || val === '1', z.boolean()).default(false)
+  SMTP_SECURE: z.preprocess((val) => val === 'true' || val === '1', z.boolean()).default(false),
+  RAZORPAY_KEY_ID: z.string().min(1),
+  RAZORPAY_KEY_SECRET: z.string().min(1)
 });
 
 export const env = envSchema.parse(process.env);

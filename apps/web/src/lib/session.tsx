@@ -44,7 +44,7 @@ export function SessionProvider({ children }: Readonly<PropsWithChildren>) {
   const refreshSession = async () => {
     try {
       const me = await apiRequest<{
-        user: { userId: string; email: string; role: SessionUser['role'] } | null;
+        user: { userId: string; email: string; name: string | null; role: SessionUser['role'] } | null;
         canRefresh: boolean;
       }>('/auth/me');
 
@@ -146,7 +146,7 @@ export function RequireAuth({
   const session = useSession();
 
   if (!session.ready) {
-    return <div className="grid min-h-screen place-items-center bg-slate-950 text-slate-200">Loading session...</div>;
+    return <div className="app-loading-screen">Loading session...</div>;
   }
 
   if (!session.isAuthenticated || !session.user) {
@@ -164,7 +164,7 @@ export function RequireGuest() {
   const session = useSession();
 
   if (!session.ready) {
-    return <div className="grid min-h-screen place-items-center bg-slate-950 text-slate-200">Loading session...</div>;
+    return <div className="app-loading-screen">Loading session...</div>;
   }
 
   if (session.isAuthenticated && session.user) {

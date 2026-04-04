@@ -228,6 +228,7 @@ export async function login(input: unknown) {
   const sessionUser: SessionUser = {
     id: user.id,
     email: user.email,
+    name: user.name,
     role: user.role
   };
 
@@ -272,6 +273,7 @@ export async function refreshSession(refreshToken: string) {
   const sessionUser: SessionUser = {
     id: storedToken.user.id,
     email: storedToken.user.email,
+    name: storedToken.user.name,
     role: storedToken.user.role
   };
 
@@ -375,6 +377,7 @@ export async function verifyOtp(input: unknown) {
   const sessionUser: SessionUser = {
     id: user.id,
     email: user.email,
+    name: user.name,
     role: user.role
   };
 

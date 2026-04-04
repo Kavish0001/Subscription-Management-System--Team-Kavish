@@ -7,6 +7,8 @@ import { apiRequest, formatCurrency, type Contact, type Product, type RecurringP
 import { ApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
 
+const fieldClass = 'app-input';
+
 export function SubscriptionFormPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -181,16 +183,16 @@ export function SubscriptionFormPage() {
       title="Subscription Form"
       actions={
         <div className="flex gap-3">
-          <button className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white" onClick={() => navigate('/admin/subscriptions')} type="button">
+          <button className="app-btn app-btn-secondary" onClick={() => navigate('/admin/subscriptions')} type="button">
             Discard
           </button>
-          <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => saveMutation.mutate()} type="button">
+          <button className="app-btn app-btn-primary" onClick={() => saveMutation.mutate()} type="button">
             Save
           </button>
         </div>
       }
     >
-      {error ? <p className="mb-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
+      {error ? <p className="theme-message theme-message-error mb-4">{error}</p> : null}
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Customer">
           <div className="grid gap-3">
@@ -248,12 +250,14 @@ export function SubscriptionFormPage() {
         <Field label="Other Info">
           <textarea className={fieldClass} onChange={(event) => setNotes(event.target.value)} rows={5} value={notes} />
         </Field>
-        <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5 md:col-span-2">
-          <p className="text-sm text-slate-300">Estimated total with tax: {formatCurrency(unitPrice * quantity * 1.18)}</p>
-          <p className="mt-3 text-sm text-slate-400">Invoices are created after the quotation is confirmed and reaches its billing date.</p>
+        <div className="app-soft-panel p-5 md:col-span-2">
+          <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">
+            Estimated total with tax: {formatCurrency(unitPrice * quantity * 1.18)}
+          </p>
+          <p className="mt-3 text-sm muted">Invoices are created after the quotation is confirmed and reaches its billing date.</p>
         </div>
         {showContactForm ? (
-          <div className="grid gap-4 rounded-[28px] border border-white/10 bg-slate-950/35 p-5 md:col-span-2 md:grid-cols-2">
+          <div className="app-card grid gap-4 p-5 md:col-span-2 md:grid-cols-2">
             <Field label="Contact Name">
               <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, name: event.target.value }))} value={contactForm.name} />
             </Field>
@@ -281,7 +285,7 @@ export function SubscriptionFormPage() {
             <Field label="Country">
               <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, country: event.target.value }))} value={contactForm.country} />
             </Field>
-            <button className="rounded-full bg-gradient-to-r from-emerald-300 to-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 md:col-span-2 md:justify-self-start" onClick={() => createContactMutation.mutate()} type="button">
+            <button className="app-btn app-btn-primary md:col-span-2 md:justify-self-start" onClick={() => createContactMutation.mutate()} type="button">
               Save Contact
             </button>
           </div>
@@ -293,11 +297,9 @@ export function SubscriptionFormPage() {
 
 function Field({ children, label }: { children: React.ReactNode; label: string }) {
   return (
-    <label className="grid gap-2 text-sm text-slate-200">
+    <label className="app-label">
       {label}
       {children}
     </label>
   );
 }
-
-const fieldClass = 'rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3';

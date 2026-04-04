@@ -48,12 +48,12 @@ export function LoginPage() {
           <p className="eyebrow">Sign in</p>
           <h2 className="section-title mt-3">Continue to your workspace</h2>
         </div>
-        <label className="grid gap-2 text-sm">
-          <span className="muted">Email ID</span>
+        <label className="app-label">
+          <span>Email ID</span>
           <input className="app-input" autoCapitalize="none" autoComplete="username" spellCheck={false} {...form.register('email')} type="email" />
         </label>
-        <label className="grid gap-2 text-sm">
-          <span className="muted">Password</span>
+        <label className="app-label">
+          <span>Password</span>
           <input className="app-input" autoComplete="current-password" {...form.register('password')} type="password" />
         </label>
         {error ? <MessageBanner tone="error">{error}</MessageBanner> : null}
@@ -64,12 +64,12 @@ export function LoginPage() {
         >
           Login
         </button>
-        <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-1 text-sm">
-          <Link className="text-[color:var(--color-secondary)]" to="/signup">
+        <div className="flex items-center justify-between gap-3 border-t border-[color:var(--color-border)] pt-1 text-sm">
+          <Link className="font-semibold text-[color:var(--color-primary-strong)]" to="/signup">
             Sign up
           </Link>
-          <Link className="text-[color:var(--color-secondary)]" to="/reset-password">
-            Forget password
+          <Link className="font-semibold text-[color:var(--color-primary-strong)]" to="/reset-password">
+            Forgot password
           </Link>
         </div>
       </form>

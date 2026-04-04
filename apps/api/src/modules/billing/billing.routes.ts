@@ -1,9 +1,12 @@
 import { InvoiceStatus, PaymentStatus, Prisma, SubscriptionStatus } from '@prisma/client';
 import { createInvoiceSchema, paginationSchema, portalCheckoutSchema, portalCheckoutSummarySchema } from '@subscription/shared';
 import { Router, type Request } from 'express';
+import { z } from 'zod';
 
+import { env } from '../../config/env.js';
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
+import { createRazorpayOrder, toPaise, verifyRazorpayPaymentSignature } from '../../lib/razorpay.js';
 import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middleware/auth.js';
 import { addInterval, isInvoiceEligibleStatus, resolveAutoCloseDate, syncSubscriptionOperationalStatuses } from '../subscriptions/lifecycle.js';
 import { buildSubscriptionPricing } from '../subscriptions/pricing.js';
@@ -34,6 +37,47 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+const razorpayOrderCreateSchema = z.discriminatedUnion('purpose', [
+  z.object({
+    purpose: z.literal('checkout'),
+    paymentMethod: z.string().min(2).max(60),
+    discountCode: z.string().max(50).optional(),
+    notes: z.string().max(4000).optional(),
+    lines: portalCheckoutSchema.shape.lines
+  }),
+  z.object({
+    purpose: z.literal('invoice'),
+    invoiceId: z.string().uuid(),
+    paymentMethod: z.string().min(2).max(60).default('card')
+  })
+]);
+
+const razorpayVerifySchema = z.object({
+  purpose: z.enum(['checkout', 'invoice']),
+  razorpayOrderId: z.string().min(1),
+  razorpayPaymentId: z.string().min(1),
+  razorpaySignature: z.string().min(1)
+});
+
+function groupPortalCheckoutLines(lines: z.infer<typeof portalCheckoutSchema>['lines']) {
+  const groupedLines = new Map<string, typeof lines>();
+
+  for (const line of lines) {
+    const key = line.recurringPlanId ?? 'no-plan';
+    groupedLines.set(key, [...(groupedLines.get(key) ?? []), line]);
+  }
+
+  return groupedLines;
+}
+
+function paymentMetadataToObject(metadata: Prisma.JsonValue | null | undefined) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return {} as Record<string, unknown>;
+  }
+
+  return metadata as Record<string, unknown>;
+}
+
 async function buildPortalCheckoutSummary(
   db: typeof prisma,
   payload: {
@@ -46,85 +90,92 @@ async function buildPortalCheckoutSummary(
     }>;
   },
 ) {
-  const groupedLines = new Map<string, typeof payload.lines>();
-  for (const line of payload.lines) {
-    const key = line.recurringPlanId ?? 'no-plan';
-    groupedLines.set(key, [...(groupedLines.get(key) ?? []), line]);
-  }
-
-  const items: Array<{
-    productId: string;
-    recurringPlanId: string | null;
-    variantId: string | null;
-    quantity: number;
-    unitPrice: Prisma.Decimal;
-    discountAmount: Prisma.Decimal;
-    taxAmount: Prisma.Decimal;
-    lineTotal: Prisma.Decimal;
-  }> = [];
-
-  let subtotalAmount = 0;
-  let discountAmount = 0;
-  let taxAmount = 0;
-  let totalAmount = 0;
-
-  for (const [planKey, lines] of groupedLines.entries()) {
-    const recurringPlan =
-      planKey === 'no-plan'
-        ? null
-        : await db.recurringPlan.findUnique({
-            where: { id: planKey }
-          });
-
-    if (planKey !== 'no-plan' && !recurringPlan) {
-      throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+  try {
+    const groupedLines = new Map<string, typeof payload.lines>();
+    for (const line of payload.lines) {
+      const key = line.recurringPlanId ?? 'no-plan';
+      groupedLines.set(key, [...(groupedLines.get(key) ?? []), line]);
     }
 
-    const pricing = await buildSubscriptionPricing(db, {
-      recurringPlanId: recurringPlan?.id ?? null,
-      discountCode: payload.discountCode,
-      lines: lines.map((line) => ({
-        productId: line.productId,
-        variantId: line.variantId,
-        quantity: line.quantity
-      }))
-    });
+    const items: Array<{
+      productId: string;
+      recurringPlanId: string | null;
+      variantId: string | null;
+      quantity: number;
+      unitPrice: Prisma.Decimal;
+      discountAmount: Prisma.Decimal;
+      taxAmount: Prisma.Decimal;
+      lineTotal: Prisma.Decimal;
+    }> = [];
 
-    subtotalAmount += Number(pricing.subtotalAmount);
-    discountAmount += Number(pricing.discountAmount);
-    taxAmount += Number(pricing.taxAmount);
-    totalAmount += Number(pricing.totalAmount);
+    let subtotalAmount = 0;
+    let discountAmount = 0;
+    let taxAmount = 0;
+    let totalAmount = 0;
 
-    pricing.lines
-      .slice()
-      .sort((left, right) => left.sortOrder - right.sortOrder)
-      .forEach((line, index) => {
-        items.push({
+    for (const [planKey, lines] of groupedLines.entries()) {
+      const recurringPlan =
+        planKey === 'no-plan'
+          ? null
+          : await db.recurringPlan.findUnique({
+              where: { id: planKey }
+            });
+
+      if (planKey !== 'no-plan' && !recurringPlan) {
+        throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+      }
+
+      const pricing = await buildSubscriptionPricing(db, {
+        recurringPlanId: recurringPlan?.id ?? null,
+        discountCode: payload.discountCode,
+        lines: lines.map((line) => ({
           productId: line.productId,
-          recurringPlanId: recurringPlan?.id ?? null,
-          variantId: line.variantId ?? null,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          discountAmount: line.discountAmount,
-          taxAmount: line.taxAmount,
-          lineTotal: line.lineTotal
-        });
-
-        if (!lines[index]) {
-          throw new AppError('Checkout summary line mismatch', 500);
-        }
+          variantId: line.variantId,
+          quantity: line.quantity
+        }))
       });
-  }
 
-  return {
-    items,
-    subtotalAmount: roundMoney(subtotalAmount),
-    discountAmount: roundMoney(discountAmount),
-    taxAmount: roundMoney(taxAmount),
-    totalAmount: roundMoney(totalAmount),
-    appliedDiscountCode: payload.discountCode?.trim().toUpperCase() || null,
-    hasDiscount: discountAmount > 0
-  };
+      subtotalAmount += Number(pricing.subtotalAmount);
+      discountAmount += Number(pricing.discountAmount);
+      taxAmount += Number(pricing.taxAmount);
+      totalAmount += Number(pricing.totalAmount);
+
+      pricing.lines
+        .slice()
+        .sort((left, right) => left.sortOrder - right.sortOrder)
+        .forEach((line, index) => {
+          items.push({
+            productId: line.productId,
+            recurringPlanId: recurringPlan?.id ?? null,
+            variantId: line.variantId ?? null,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            discountAmount: line.discountAmount,
+            taxAmount: line.taxAmount,
+            lineTotal: line.lineTotal
+          });
+
+          if (!lines[index]) {
+            throw new AppError('Checkout summary line mismatch', 500);
+          }
+        });
+    }
+
+    return {
+      items,
+      subtotalAmount: roundMoney(subtotalAmount),
+      discountAmount: roundMoney(discountAmount),
+      taxAmount: roundMoney(taxAmount),
+      totalAmount: roundMoney(totalAmount),
+      appliedDiscountCode: payload.discountCode?.trim().toUpperCase() || null,
+      hasDiscount: discountAmount > 0
+    };
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    throw new AppError('Failed to build checkout summary', 500);
+  }
 }
 
 billingRouter.get('/invoices', async (request, response) => {
@@ -209,193 +260,473 @@ billingRouter.post('/checkout/summary', requireRole('portal_user'), async (reque
   }
 });
 
-billingRouter.post('/checkout/complete', requireRole('portal_user'), async (request, response, next) => {
+billingRouter.post('/payments/razorpay/order', async (request, response, next) => {
   try {
+    await syncSubscriptionOperationalStatuses(prisma);
+
     const auth = (request as AuthenticatedRequest).auth;
     if (!auth) {
       throw new AppError('Authentication required', 401);
     }
 
-    const payload = portalCheckoutSchema.parse(request.body);
-    const contact = await prisma.contact.findFirst({
-      where: {
-        userId: auth.userId,
-        isActive: true
-      },
-      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }]
+    const payload = razorpayOrderCreateSchema.parse(request.body);
+
+    if (payload.purpose === 'checkout') {
+      if (auth.role !== 'portal_user') {
+        throw new AppError('Only portal users can create checkout payments', 403);
+      }
+
+      const contact = await prisma.contact.findFirst({
+        where: {
+          userId: auth.userId,
+          isActive: true
+        },
+        orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }]
+      });
+
+      if (!contact) {
+        throw new AppError('Contact not found', 404, 'CONTACT_NOT_FOUND');
+      }
+
+      const summary = await buildPortalCheckoutSummary(prisma, {
+        discountCode: payload.discountCode,
+        lines: payload.lines
+      });
+
+      if (Number(summary.totalAmount) <= 0) {
+        throw new AppError('Checkout total must be greater than zero', 409);
+      }
+
+      const razorpayOrder = await createRazorpayOrder({
+        amountPaise: toPaise(Number(summary.totalAmount)),
+        currency: 'INR',
+        receipt: `checkout-${Date.now()}`,
+        notes: {
+          source: 'portal_checkout',
+          userId: auth.userId
+        }
+      });
+
+      const groupedLines = groupPortalCheckoutLines(payload.lines);
+
+      const created = await prisma.$transaction(
+        async (tx) => {
+          const subscriptionIds: string[] = [];
+          const invoiceIds: string[] = [];
+
+          for (const [planKey, lines] of groupedLines.entries()) {
+            const recurringPlan =
+              planKey === 'no-plan'
+                ? null
+                : await tx.recurringPlan.findUnique({
+                    where: { id: planKey }
+                  });
+
+            if (planKey !== 'no-plan' && !recurringPlan) {
+              throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+            }
+
+            const now = new Date();
+            const pricing = await buildSubscriptionPricing(tx, {
+              recurringPlanId: recurringPlan?.id ?? null,
+              discountCode: payload.discountCode,
+              lines: lines.map((line) => ({
+                productId: line.productId,
+                variantId: line.variantId,
+                quantity: line.quantity
+              }))
+            });
+
+            const subscription = await tx.subscriptionOrder.create({
+              data: {
+                subscriptionNumber: `SUB-${Date.now()}-${subscriptionIds.length + 1}`,
+                customerContactId: contact.id,
+                salespersonUserId: auth.userId,
+                recurringPlanId: recurringPlan?.id,
+                sourceChannel: 'portal',
+                status: SubscriptionStatus.confirmed,
+                quotationDate: now,
+                quotationExpiresAt: now,
+                confirmedAt: now,
+                startDate: now,
+                nextInvoiceDate: now,
+                expirationDate: recurringPlan
+                  ? resolveAutoCloseDate({
+                      startDate: now,
+                      autoCloseEnabled: recurringPlan.autoCloseEnabled,
+                      autoCloseAfterCount: recurringPlan.autoCloseAfterCount,
+                      autoCloseAfterUnit: recurringPlan.autoCloseAfterUnit
+                    })
+                  : null,
+                paymentTermLabel: 'Immediate payment',
+                subtotalAmount: pricing.subtotalAmount,
+                discountAmount: pricing.discountAmount,
+                taxAmount: pricing.taxAmount,
+                totalAmount: pricing.totalAmount,
+                notes: payload.notes,
+                lines: {
+                  create: pricing.lines
+                }
+              },
+              include: {
+                lines: true
+              }
+            });
+
+            const invoice = await tx.invoice.create({
+              data: {
+                invoiceNumber: `INV-${Date.now()}-${invoiceIds.length + 1}`,
+                subscriptionOrderId: subscription.id,
+                customerContactId: contact.id,
+                status: InvoiceStatus.confirmed,
+                invoiceDate: now,
+                dueDate: now,
+                sourceLabel: 'Portal checkout',
+                paymentTermLabel: subscription.paymentTermLabel,
+                currencyCode: subscription.currencyCode,
+                subtotalAmount: subscription.subtotalAmount,
+                discountAmount: subscription.discountAmount,
+                taxAmount: subscription.taxAmount,
+                totalAmount: subscription.totalAmount,
+                amountDue: subscription.totalAmount,
+                lines: {
+                  create: subscription.lines.map((line) => ({
+                    subscriptionOrderLineId: line.id,
+                    productNameSnapshot: line.productNameSnapshot,
+                    quantity: line.quantity,
+                    unitPrice: line.unitPrice,
+                    discountAmount: line.discountAmount,
+                    taxAmount: line.taxAmount,
+                    lineTotal: line.lineTotal,
+                    sortOrder: line.sortOrder
+                  }))
+                }
+              }
+            });
+
+            await tx.payment.create({
+              data: {
+                invoiceId: invoice.id,
+                paymentReference: `RZP-PENDING-${Date.now()}-${invoiceIds.length + 1}`,
+                paymentMethod: payload.paymentMethod,
+                provider: 'razorpay',
+                status: PaymentStatus.pending,
+                amount: subscription.totalAmount,
+                currencyCode: subscription.currencyCode,
+                providerTransactionId: razorpayOrder.id,
+                metadataJson: {
+                  purpose: 'checkout',
+                  razorpayOrderId: razorpayOrder.id,
+                  paymentMethod: payload.paymentMethod,
+                  appliedDiscountRuleId: pricing.appliedDiscountRuleId
+                }
+              }
+            });
+
+            subscriptionIds.push(subscription.id);
+            invoiceIds.push(invoice.id);
+          }
+
+          return { subscriptionIds, invoiceIds };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+        }
+      );
+
+      return response.status(201).json({
+        data: {
+          purpose: 'checkout',
+          keyId: env.RAZORPAY_KEY_ID,
+          orderId: razorpayOrder.id,
+          amount: razorpayOrder.amount,
+          currency: razorpayOrder.currency,
+          merchantName: 'Veltrix',
+          description: 'Subscription checkout',
+          customer: {
+            name: contact.name,
+            email: contact.email,
+            contact: contact.phone
+          },
+          subscriptionIds: created.subscriptionIds,
+          invoiceIds: created.invoiceIds
+        }
+      });
+    }
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: payload.invoiceId },
+      include: {
+        subscriptionOrder: {
+          include: {
+            recurringPlan: true
+          }
+        },
+        customerContact: true,
+        payments: {
+          where: {
+            provider: 'razorpay',
+            status: PaymentStatus.pending
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
+      }
     });
 
-    if (!contact) {
-      throw new AppError('Contact not found', 404, 'CONTACT_NOT_FOUND');
+    if (!invoice) {
+      throw new AppError('Invoice not found', 404, 'INVOICE_NOT_FOUND');
     }
 
-    const groupedLines = new Map<string, typeof payload.lines>();
-    for (const line of payload.lines) {
-      const key = line.recurringPlanId ?? 'no-plan';
-      groupedLines.set(key, [...(groupedLines.get(key) ?? []), line]);
+    assertInvoiceAccess(auth, invoice.customerContact.userId);
+
+    if (invoice.status !== InvoiceStatus.confirmed) {
+      throw new AppError('Only confirmed invoices can be paid', 409);
     }
+
+    if (Number(invoice.amountDue) <= 0) {
+      throw new AppError('Invoice does not have an outstanding balance', 409);
+    }
+
+    const existingPendingPayment = invoice.payments[0];
+    const razorpayOrderId =
+      typeof existingPendingPayment?.providerTransactionId === 'string'
+        ? existingPendingPayment.providerTransactionId
+        : null;
+
+    if (!razorpayOrderId) {
+      const razorpayOrder = await createRazorpayOrder({
+        amountPaise: toPaise(Number(invoice.amountDue)),
+        currency: invoice.currencyCode,
+        receipt: `invoice-${invoice.invoiceNumber}`,
+        notes: {
+          source: 'invoice_payment',
+          invoiceId: invoice.id
+        }
+      });
+
+      await prisma.payment.create({
+        data: {
+          invoiceId: invoice.id,
+          paymentReference: `RZP-PENDING-${Date.now()}`,
+          paymentMethod: payload.paymentMethod,
+          provider: 'razorpay',
+          status: PaymentStatus.pending,
+          amount: new Prisma.Decimal(invoice.amountDue),
+          currencyCode: invoice.currencyCode,
+          providerTransactionId: razorpayOrder.id,
+          metadataJson: {
+            purpose: 'invoice',
+            razorpayOrderId: razorpayOrder.id,
+            paymentMethod: payload.paymentMethod
+          }
+        }
+      });
+
+      return response.status(201).json({
+        data: {
+          purpose: 'invoice',
+          keyId: env.RAZORPAY_KEY_ID,
+          orderId: razorpayOrder.id,
+          amount: razorpayOrder.amount,
+          currency: razorpayOrder.currency,
+          merchantName: 'Veltrix',
+          description: `Invoice ${invoice.invoiceNumber}`,
+          customer: {
+            name: invoice.customerContact.name,
+            email: invoice.customerContact.email,
+            contact: invoice.customerContact.phone
+          },
+          subscriptionIds: [invoice.subscriptionOrderId],
+          invoiceIds: [invoice.id]
+        }
+      });
+    }
+
+    return response.status(201).json({
+      data: {
+        purpose: 'invoice',
+        keyId: env.RAZORPAY_KEY_ID,
+        orderId: razorpayOrderId,
+        amount: toPaise(Number(invoice.amountDue)),
+        currency: invoice.currencyCode,
+        merchantName: 'Veltrix',
+        description: `Invoice ${invoice.invoiceNumber}`,
+        customer: {
+          name: invoice.customerContact.name,
+          email: invoice.customerContact.email,
+          contact: invoice.customerContact.phone
+        },
+        subscriptionIds: [invoice.subscriptionOrderId],
+        invoiceIds: [invoice.id]
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+billingRouter.post('/payments/razorpay/verify', async (request, response, next) => {
+  try {
+    await syncSubscriptionOperationalStatuses(prisma);
+
+    const auth = (request as AuthenticatedRequest).auth;
+    if (!auth) {
+      throw new AppError('Authentication required', 401);
+    }
+
+    const payload = razorpayVerifySchema.parse(request.body);
+
+    if (
+      !verifyRazorpayPaymentSignature({
+        orderId: payload.razorpayOrderId,
+        paymentId: payload.razorpayPaymentId,
+        signature: payload.razorpaySignature
+      })
+    ) {
+      throw new AppError('Invalid Razorpay payment signature', 400, 'RAZORPAY_SIGNATURE_INVALID');
+    }
+
+    const existingPayments = await prisma.payment.findMany({
+      where: {
+        provider: 'razorpay',
+        providerTransactionId: payload.razorpayOrderId
+      },
+      include: {
+        invoice: {
+          include: {
+            customerContact: true,
+            subscriptionOrder: {
+              include: {
+                recurringPlan: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'asc'
+      }
+    });
+
+    if (existingPayments.length === 0) {
+      throw new AppError('Razorpay payment record not found', 404, 'PAYMENT_NOT_FOUND');
+    }
+
+    existingPayments.forEach((payment) => {
+      assertInvoiceAccess(auth, payment.invoice.customerContact.userId);
+    });
+
+    const alreadyCaptured = existingPayments.every((payment) => payment.status === PaymentStatus.succeeded);
+    if (alreadyCaptured) {
+      return response.json({
+        data: {
+          subscriptionIds: Array.from(new Set(existingPayments.map((payment) => payment.invoice.subscriptionOrderId))),
+          invoiceIds: Array.from(new Set(existingPayments.map((payment) => payment.invoiceId)))
+        }
+      });
+    }
+
+    const now = new Date();
 
     const result = await prisma.$transaction(
       async (tx) => {
-        const subscriptionIds: string[] = [];
-        const invoiceIds: string[] = [];
+        const subscriptionIds = new Set<string>();
+        const invoiceIds = new Set<string>();
+        const discountRuleIds = new Set<string>();
 
-        for (const [planKey, lines] of groupedLines.entries()) {
-          const recurringPlan =
-            planKey === 'no-plan'
-              ? null
-              : await tx.recurringPlan.findUnique({
-                  where: { id: planKey }
-                });
-
-          if (planKey !== 'no-plan' && !recurringPlan) {
-            throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+        for (const [index, payment] of existingPayments.entries()) {
+          const metadata = paymentMetadataToObject(payment.metadataJson);
+          const appliedDiscountRuleId = typeof metadata.appliedDiscountRuleId === 'string' ? metadata.appliedDiscountRuleId : null;
+          if (appliedDiscountRuleId) {
+            discountRuleIds.add(appliedDiscountRuleId);
           }
 
-          const now = new Date();
-          const pricing = await buildSubscriptionPricing(tx, {
-            recurringPlanId: recurringPlan?.id ?? null,
-            discountCode: payload.discountCode,
-            lines: lines.map((line) => ({
-              productId: line.productId,
-              variantId: line.variantId,
-              quantity: line.quantity
-            }))
-          });
-
-          const subscription = await tx.subscriptionOrder.create({
+          await tx.payment.update({
+            where: { id: payment.id },
             data: {
-              subscriptionNumber: `SUB-${Date.now()}-${subscriptionIds.length + 1}`,
-              customerContactId: contact.id,
-              salespersonUserId: auth.userId,
-              recurringPlanId: recurringPlan?.id,
-              sourceChannel: 'portal',
-              status: SubscriptionStatus.confirmed,
-              quotationDate: now,
-              quotationExpiresAt: now,
-              confirmedAt: now,
-              startDate: now,
-              nextInvoiceDate: now,
-              expirationDate: recurringPlan
-                ? resolveAutoCloseDate({
-                    startDate: now,
-                    autoCloseEnabled: recurringPlan.autoCloseEnabled,
-                    autoCloseAfterCount: recurringPlan.autoCloseAfterCount,
-                    autoCloseAfterUnit: recurringPlan.autoCloseAfterUnit
-                  })
-                : null,
-              paymentTermLabel: 'Immediate payment',
-              subtotalAmount: pricing.subtotalAmount,
-              discountAmount: pricing.discountAmount,
-              taxAmount: pricing.taxAmount,
-              totalAmount: pricing.totalAmount,
-              notes: payload.notes,
-              lines: {
-                create: pricing.lines
-              }
-            },
-            include: {
-              lines: true
-            }
-          });
-
-          const invoice = await tx.invoice.create({
-            data: {
-              invoiceNumber: `INV-${Date.now()}-${invoiceIds.length + 1}`,
-              subscriptionOrderId: subscription.id,
-              customerContactId: contact.id,
-              status: InvoiceStatus.confirmed,
-              invoiceDate: now,
-              dueDate: now,
-              sourceLabel: 'Portal checkout',
-              paymentTermLabel: subscription.paymentTermLabel,
-              currencyCode: subscription.currencyCode,
-              subtotalAmount: subscription.subtotalAmount,
-              discountAmount: subscription.discountAmount,
-              taxAmount: subscription.taxAmount,
-              totalAmount: subscription.totalAmount,
-              amountDue: subscription.totalAmount,
-              lines: {
-                create: subscription.lines.map((line) => ({
-                  subscriptionOrderLineId: line.id,
-                  productNameSnapshot: line.productNameSnapshot,
-                  quantity: line.quantity,
-                  unitPrice: line.unitPrice,
-                  discountAmount: line.discountAmount,
-                  taxAmount: line.taxAmount,
-                  lineTotal: line.lineTotal,
-                  sortOrder: line.sortOrder
-                }))
-              }
-            }
-          });
-
-          await tx.payment.create({
-            data: {
-              invoiceId: invoice.id,
-              paymentReference: `PAY-${Date.now()}-${invoiceIds.length + 1}`,
-              paymentMethod: payload.paymentMethod,
-              provider: 'mock_gateway',
+              paymentReference: `RZP-${payload.razorpayPaymentId}-${index + 1}`,
+              provider: 'razorpay',
               status: PaymentStatus.succeeded,
-              amount: subscription.totalAmount,
-              currencyCode: subscription.currencyCode,
-              paidAt: now
+              paidAt: now,
+              metadataJson: {
+                ...metadata,
+                purpose: payload.purpose,
+                razorpayOrderId: payload.razorpayOrderId,
+                razorpayPaymentId: payload.razorpayPaymentId,
+                razorpaySignature: payload.razorpaySignature,
+                verifiedAt: now.toISOString()
+              }
             }
           });
 
           await tx.invoice.update({
-            where: { id: invoice.id },
+            where: { id: payment.invoiceId },
             data: {
               status: InvoiceStatus.paid,
-              paidAmount: subscription.totalAmount,
+              paidAmount: payment.invoice.totalAmount,
               amountDue: new Prisma.Decimal(0),
               paidAt: now
             }
           });
 
+          const nextSubscriptionState =
+            payment.invoice.subscriptionOrder.startDate && payment.invoice.subscriptionOrder.startDate <= now
+              ? SubscriptionStatus.in_progress
+              : SubscriptionStatus.confirmed;
+
           await tx.subscriptionOrder.update({
-            where: { id: subscription.id },
+            where: { id: payment.invoice.subscriptionOrderId },
             data: {
-              status: SubscriptionStatus.in_progress,
-              nextInvoiceDate: recurringPlan
-                ? nextInvoiceDateFromPlan(
-                    now,
-                    recurringPlan.intervalUnit,
-                    recurringPlan.intervalCount ?? 1,
-                  )
-                : null
+              status: nextSubscriptionState,
+              ...(payload.purpose === 'checkout'
+                ? {
+                    nextInvoiceDate: payment.invoice.subscriptionOrder.recurringPlan
+                      ? nextInvoiceDateFromPlan(
+                          now,
+                          payment.invoice.subscriptionOrder.recurringPlan.intervalUnit,
+                          payment.invoice.subscriptionOrder.recurringPlan.intervalCount ?? 1
+                        )
+                      : null
+                  }
+                : {})
             }
           });
 
-          if (pricing.appliedDiscountRuleId) {
-            await tx.discountRule.update({
-              where: { id: pricing.appliedDiscountRuleId },
-              data: {
-                usageCount: {
-                  increment: 1
-                }
-              }
-            });
-          }
+          subscriptionIds.add(payment.invoice.subscriptionOrderId);
+          invoiceIds.add(payment.invoiceId);
+        }
 
-          subscriptionIds.push(subscription.id);
-          invoiceIds.push(invoice.id);
+        for (const discountRuleId of discountRuleIds) {
+          await tx.discountRule.update({
+            where: { id: discountRuleId },
+            data: {
+              usageCount: {
+                increment: 1
+              }
+            }
+          });
         }
 
         return {
-          subscriptionIds,
-          invoiceIds
+          subscriptionIds: [...subscriptionIds],
+          invoiceIds: [...invoiceIds]
         };
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable
-      },
+      }
     );
 
     response.status(201).json({ data: result });
   } catch (error) {
     next(error);
   }
+});
+
+billingRouter.post('/checkout/complete', requireRole('portal_user'), async (_request, _response, next) => {
+  next(new AppError('Direct checkout completion is disabled. Use Razorpay payment verification.', 409));
 });
 
 billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_user'), async (request, response, next) => {
@@ -582,93 +913,6 @@ billingRouter.post('/invoices/:id/restore-draft', requireRole('admin', 'internal
   }
 });
 
-billingRouter.post('/payments/mock', async (request, response, next) => {
-  try {
-    await syncSubscriptionOperationalStatuses(prisma);
-
-    const auth = (request as AuthenticatedRequest).auth;
-    const invoiceId = request.body.invoiceId as string | undefined;
-    const paymentMethod = (request.body.paymentMethod as string | undefined) ?? 'mock-card';
-    if (!invoiceId) {
-      throw new AppError('invoiceId is required');
-    }
-
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId },
-      include: {
-        subscriptionOrder: {
-          include: {
-            recurringPlan: true
-          }
-        },
-        customerContact: true
-      }
-    });
-
-    if (!invoice) {
-      throw new AppError('Invoice not found', 404);
-    }
-
-    assertInvoiceAccess(auth, invoice.customerContact.userId);
-
-    if (invoice.status !== InvoiceStatus.confirmed) {
-      throw new AppError('Only confirmed invoices can be paid', 409);
-    }
-
-    if (Number(invoice.amountDue) <= 0) {
-      throw new AppError('Invoice does not have an outstanding balance', 409);
-    }
-
-    const result = await prisma.$transaction(
-      async (tx) => {
-        const payment = await tx.payment.create({
-          data: {
-            invoiceId,
-            paymentReference: `PAY-${Date.now()}`,
-            paymentMethod,
-            provider: 'mock_gateway',
-            status: PaymentStatus.succeeded,
-            amount: new Prisma.Decimal(invoice.amountDue),
-            currencyCode: invoice.currencyCode,
-            paidAt: new Date()
-          }
-        });
-
-        const updatedInvoice = await tx.invoice.update({
-          where: { id: invoiceId },
-          data: {
-            status: InvoiceStatus.paid,
-            paidAmount: invoice.totalAmount,
-            amountDue: new Prisma.Decimal(0),
-            paidAt: new Date()
-          }
-        });
-
-        const updatedSubscription = await tx.subscriptionOrder.update({
-          where: { id: invoice.subscriptionOrderId },
-          data: {
-            status:
-              invoice.subscriptionOrder.startDate && invoice.subscriptionOrder.startDate <= new Date()
-                ? SubscriptionStatus.in_progress
-                : SubscriptionStatus.confirmed
-          }
-        });
-
-        return {
-          payment,
-          invoice: updatedInvoice,
-          subscription: updatedSubscription
-        };
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
-      },
-    );
-
-    response.status(201).json({
-      data: result
-    });
-  } catch (error) {
-    next(error);
-  }
+billingRouter.post('/payments/mock', async (_request, _response, next) => {
+  next(new AppError('Mock payments are disabled. Use Razorpay payment flow instead.', 410));
 });

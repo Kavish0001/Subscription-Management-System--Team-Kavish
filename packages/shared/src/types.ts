@@ -21,6 +21,7 @@ export interface PaginatedResult<T> {
 export interface SessionUser {
   id: string;
   email: string;
+  name: string | null;
   role: UserRole;
 }
 

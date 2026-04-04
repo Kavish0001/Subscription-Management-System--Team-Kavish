@@ -11,9 +11,12 @@ import {
   type CheckoutSummary,
   type Contact,
   type Invoice,
+  type RazorpayOrder,
+  type RazorpayVerificationResult,
   type Subscription
 } from '../../lib/api';
-import { useCartStore, type CartItem } from '../../lib/cart';
+import { cartSubtotal, useCartStore, type CartItem } from '../../lib/cart';
+import { openRazorpayCheckout } from '../../lib/razorpay';
 import { useSession } from '../../lib/session';
 
 const checkoutAddressKey = 'veltrix-checkout-address';
@@ -34,7 +37,7 @@ type CheckoutAddress = {
 };
 
 export function CartPage() {
-  const { token } = useSession();
+  const { isAuthenticated, token } = useSession();
   const items = useCartStore((state) => state.items);
   const discountCode = useCartStore((state) => state.discountCode);
   const applyDiscount = useCartStore((state) => state.applyDiscount);
@@ -43,8 +46,30 @@ export function CartPage() {
   const removeItem = useCartStore((state) => state.removeItem);
   const [codeInput, setCodeInput] = useState(discountCode);
   const [discountFeedback, setDiscountFeedback] = useState<string | null>(null);
-  const summaryQuery = useCheckoutSummary(token);
+  const summaryQuery = useCheckoutSummary(token, isAuthenticated);
   const summaryItems = useSummaryItems(summaryQuery.data);
+  const guestSummary = useMemo(
+    () => ({
+      items: items.map((item) => ({
+        productId: item.productId,
+        recurringPlanId: item.recurringPlanId,
+        variantId: item.variantId ?? null,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discountAmount: 0,
+        taxAmount: 0,
+        lineTotal: item.unitPrice * item.quantity
+      })),
+      subtotalAmount: cartSubtotal(items),
+      discountAmount: 0,
+      taxAmount: 0,
+      totalAmount: cartSubtotal(items),
+      appliedDiscountCode: null,
+      hasDiscount: false
+    }),
+    [items]
+  );
+  const displayedSummary = isAuthenticated ? summaryQuery.data : guestSummary;
 
   return (
     <CheckoutShell
@@ -111,12 +136,22 @@ export function CartPage() {
 
           <CheckoutSummaryCard
             actions={
-              <Link
-                className="inline-flex w-full items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
-                to="/checkout/address"
-              >
-                Checkout
-              </Link>
+              isAuthenticated ? (
+                <Link
+                  className="inline-flex w-full items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                  to="/checkout/address"
+                >
+                  Checkout
+                </Link>
+              ) : (
+                <Link
+                  className="inline-flex w-full items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                  state={{ from: '/checkout/address' }}
+                  to="/login"
+                >
+                  Login to checkout
+                </Link>
+              )
             }
             codeInput={codeInput}
             discountFeedback={discountFeedback}
@@ -131,10 +166,17 @@ export function CartPage() {
               setDiscountFeedback('Discount code saved. Totals update automatically.');
             }}
             onCodeInputChange={setCodeInput}
-            showDiscountInput
-            summary={summaryQuery.data}
-            summaryError={summaryQuery.error instanceof ApiError ? summaryQuery.error.message : null}
-            summaryLoading={summaryQuery.isPending}
+            detail={
+              !isAuthenticated ? (
+                <div className="rounded-[22px] border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
+                  Guest cart is available. Sign in before checkout to calculate taxes, validate discounts, and place the order.
+                </div>
+              ) : undefined
+            }
+            showDiscountInput={isAuthenticated}
+            summary={displayedSummary}
+            summaryError={isAuthenticated && summaryQuery.error instanceof ApiError ? summaryQuery.error.message : null}
+            summaryLoading={isAuthenticated && summaryQuery.isPending}
           />
         </div>
       )}
@@ -144,7 +186,7 @@ export function CartPage() {
 
 export function CheckoutAddressPage() {
   const navigate = useNavigate();
-  const { token } = useSession();
+  const { isAuthenticated, token } = useSession();
   const items = useCartStore((state) => state.items);
   const [useAlternateAddress, setUseAlternateAddress] = useState(false);
   const [addressError, setAddressError] = useState<string | null>(null);
@@ -157,7 +199,7 @@ export function CheckoutAddressPage() {
     country: 'India'
   });
   const contactQuery = usePortalContact(token);
-  const summaryQuery = useCheckoutSummary(token);
+  const summaryQuery = useCheckoutSummary(token, isAuthenticated);
 
   const defaultAddress =
     contactQuery.data?.addresses.find((address) => address.isDefault) ?? contactQuery.data?.addresses[0];
@@ -302,20 +344,21 @@ export function CheckoutAddressPage() {
 export function CheckoutPaymentPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { token } = useSession();
+  const { isAuthenticated, token } = useSession();
   const items = useCartStore((state) => state.items);
   const clearCart = useCartStore((state) => state.clear);
   const discountCode = useCartStore((state) => state.discountCode);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'upi' | 'netbanking'>('card');
   const [error, setError] = useState<string | null>(null);
-  const summaryQuery = useCheckoutSummary(token);
+  const summaryQuery = useCheckoutSummary(token, isAuthenticated);
 
   const paymentMutation = useMutation({
-    mutationFn: async () =>
-      apiRequest<{ subscriptionIds: string[]; invoiceIds: string[] }>('/checkout/complete', {
+    mutationFn: async () => {
+      const order = await apiRequest<RazorpayOrder>('/payments/razorpay/order', {
         token,
         method: 'POST',
         body: JSON.stringify({
+          purpose: 'checkout',
           paymentMethod,
           discountCode: discountCode || undefined,
           lines: items.map((item) => ({
@@ -325,7 +368,29 @@ export function CheckoutPaymentPage() {
             quantity: item.quantity
           }))
         })
-      }),
+      });
+
+      const razorpayPayment = await openRazorpayCheckout({
+        keyId: order.keyId,
+        orderId: order.orderId,
+        amount: order.amount,
+        currency: order.currency,
+        merchantName: order.merchantName,
+        description: order.description,
+        customer: order.customer
+      });
+
+      return apiRequest<RazorpayVerificationResult>('/payments/razorpay/verify', {
+        token,
+        method: 'POST',
+        body: JSON.stringify({
+          purpose: 'checkout',
+          razorpayOrderId: razorpayPayment.razorpay_order_id,
+          razorpayPaymentId: razorpayPayment.razorpay_payment_id,
+          razorpaySignature: razorpayPayment.razorpay_signature
+        })
+      });
+    },
     onSuccess: async (result) => {
       clearCart();
       await Promise.all([
@@ -336,14 +401,16 @@ export function CheckoutPaymentPage() {
       navigate(`/checkout/success?subscriptions=${result.subscriptionIds.join(',')}&invoices=${result.invoiceIds.join(',')}`);
     },
     onError: (mutationError) => {
-      setError(mutationError instanceof ApiError ? mutationError.message : 'Payment failed');
+      setError(
+        mutationError instanceof ApiError || mutationError instanceof Error ? mutationError.message : 'Payment failed'
+      );
     }
   });
 
   return (
     <CheckoutShell
       currentStep="payment"
-      description="A demo payment gateway is active here, so you can finish the external checkout flow and create the order immediately."
+      description="Razorpay is used here for the live test payment flow before the subscription order is finalized."
       title="Payment"
     >
       {items.length === 0 ? (
@@ -360,7 +427,7 @@ export function CheckoutPaymentPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Payment gateway</p>
               <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-slate-950">Choose payment method</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Demo processing is enabled for the hackathon flow. The payment action will create the order and mark the invoice as paid.
+                Razorpay test checkout opens in the next step and records the payment against the generated subscription invoice.
               </p>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -380,7 +447,7 @@ export function CheckoutPaymentPage() {
                     type="button"
                   >
                     <p className="font-semibold">{option.label}</p>
-                    <p className="mt-1 text-sm opacity-80">Mock gateway enabled</p>
+                    <p className="mt-1 text-sm opacity-80">Razorpay test mode</p>
                   </button>
                 ))}
               </div>
@@ -406,7 +473,7 @@ export function CheckoutPaymentPage() {
                 onClick={() => paymentMutation.mutate()}
                 type="button"
               >
-                {paymentMutation.isPending ? 'Processing payment...' : 'Pay now'}
+                {paymentMutation.isPending ? 'Opening Razorpay...' : 'Pay with Razorpay'}
               </button>
             }
             detail={
@@ -750,7 +817,7 @@ function usePortalContact(token: string | null) {
   });
 }
 
-function useCheckoutSummary(token: string | null) {
+function useCheckoutSummary(token: string | null, enabled: boolean) {
   const items = useCartStore((state) => state.items);
   const discountCode = useCartStore((state) => state.discountCode);
 
@@ -779,7 +846,7 @@ function useCheckoutSummary(token: string | null) {
           }))
         })
       }),
-    enabled: Boolean(token) && items.length > 0
+    enabled: enabled && items.length > 0
   });
 }
 

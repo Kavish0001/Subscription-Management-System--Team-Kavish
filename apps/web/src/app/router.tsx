@@ -39,12 +39,12 @@ export const router = createBrowserRouter([
     element: <PortalLayout />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'shop', element: <ShopPage /> },
+      { path: 'products/:slug', element: <ProductPage /> },
+      { path: 'cart', element: <CartPage /> },
       {
         element: <RequireAuth />,
         children: [
-          { path: 'shop', element: <ShopPage /> },
-          { path: 'products/:slug', element: <ProductPage /> },
-          { path: 'cart', element: <CartPage /> },
           { path: 'checkout/address', element: <CheckoutAddressPage /> },
           { path: 'checkout/payment', element: <CheckoutPaymentPage /> },
           { path: 'checkout/success', element: <CheckoutSuccessPage /> },

@@ -43,7 +43,7 @@ const priceRanges: readonly PriceRangeOption[] = [
 type PriceRangeKey = PriceRangeOption['key'];
 
 export function ShopPage() {
-  const { isAuthenticated, token } = useSession();
+  const { token } = useSession();
   const addItem = useCartStore((state) => state.addItem);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
@@ -60,7 +60,7 @@ export function ShopPage() {
   const categoriesQuery = useQuery({
     queryKey: ['portal-categories'],
     queryFn: () => apiRequest<ProductCategory[]>('/categories', { token }),
-    enabled: isAuthenticated
+    enabled: true
   });
 
   const productsQuery = useQuery({
@@ -94,22 +94,18 @@ export function ShopPage() {
 
       return apiRequest<PaginatedResponse<Product>>(`/products?${params.toString()}`, { token });
     },
-    enabled: isAuthenticated
+    enabled: true
   });
 
   const plansQuery = useQuery({
     queryKey: ['portal-plans'],
     queryFn: () => apiRequest<RecurringPlan[]>('/recurring-plans', { token }),
-    enabled: isAuthenticated
+    enabled: true
   });
 
   useEffect(() => {
     setPage(1);
   }, [deferredSearch, sortBy, categoryId, productType, priceRangeKey]);
-
-  if (!isAuthenticated) {
-    return <AuthRequiredMessage title="Shop" />;
-  }
 
   const categories = categoriesQuery.data ?? [];
   const products = productsQuery.data?.items ?? [];
@@ -370,7 +366,7 @@ export function ShopPage() {
 
 export function ProductPage() {
   const { slug } = useParams();
-  const { isAuthenticated, token } = useSession();
+  const { token } = useSession();
   const addItem = useCartStore((state) => state.addItem);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [selectedVariantId, setSelectedVariantId] = useState('');
@@ -379,18 +375,14 @@ export function ProductPage() {
   const productsQuery = useQuery({
     queryKey: ['product-detail', slug],
     queryFn: () => apiRequest<Product>(`/products/${slug}`, { token }),
-    enabled: isAuthenticated && Boolean(slug)
+    enabled: Boolean(slug)
   });
 
   const plansQuery = useQuery({
     queryKey: ['product-detail-plans'],
     queryFn: () => apiRequest<RecurringPlan[]>('/recurring-plans', { token }),
-    enabled: isAuthenticated
+    enabled: true
   });
-
-  if (!isAuthenticated) {
-    return <AuthRequiredMessage title="Product" />;
-  }
 
   const product = productsQuery.data ?? null;
   const planOptions = product ? productPlanOptions(product, plansQuery.data ?? []) : [];
@@ -563,17 +555,6 @@ export function ProductPage() {
         </div>
       </section>
     </div>
-  );
-}
-
-function AuthRequiredMessage({ title }: { readonly title: string }) {
-  return (
-    <Surface title={title}>
-      <p className="mb-4 text-slate-600">Login first to access portal shopping and order pages.</p>
-      <Link className="inline-flex rounded-full bg-emerald-600 px-5 py-3 font-semibold text-white" to="/login">
-        Login
-      </Link>
-    </Surface>
   );
 }
 
