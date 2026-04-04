@@ -8,7 +8,7 @@ import { ApiError } from '../../lib/api';
 import { cartSubtotal, useCartStore } from '../../lib/cart';
 import { useSession } from '../../lib/session';
 
-const checkoutAddressKey = 'subflow-checkout-address';
+const checkoutAddressKey = 'veltrix-checkout-address';
 const fieldClass = 'rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3';
 
 export function CartPage() {

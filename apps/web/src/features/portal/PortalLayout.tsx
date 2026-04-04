@@ -1,15 +1,16 @@
 import { Link, Outlet } from 'react-router-dom';
 
+import { CreditCardIcon, CubeIcon, HomeIcon, ReceiptIcon, UsersIcon } from '../../components/icons';
 import { Shell } from '../../components/layout';
 import { useCartStore } from '../../lib/cart';
 import { useSession } from '../../lib/session';
 
-const navigation = [
-  { label: 'Home', to: '/' },
-  { label: 'Shop', to: '/shop' },
-  { label: 'Cart', to: '/cart' },
-  { label: 'My Account', to: '/account/profile' },
-  { label: 'My Orders', to: '/account/orders' }
+const baseNavigation = [
+  { label: 'Home', to: '/', icon: HomeIcon, detail: 'Overview and next steps' },
+  { label: 'Shop', to: '/shop', icon: CubeIcon, detail: 'Subscription-enabled catalog' },
+  { label: 'Cart', to: '/cart', icon: CreditCardIcon, detail: 'Checkout staging area' },
+  { label: 'My Account', to: '/account/profile', icon: UsersIcon, detail: 'Profile and contact data' },
+  { label: 'My Orders', to: '/account/orders', icon: ReceiptIcon, detail: 'Subscriptions and invoices' }
 ];
 
 export function PortalLayout() {
@@ -20,25 +21,22 @@ export function PortalLayout() {
     <Shell
       title="Customer Portal"
       subtitle="Subscription storefront"
-      navigation={navigation.map((item) =>
+      navigation={baseNavigation.map((item) =>
         item.to === '/cart' ? { ...item, label: `Cart (${itemCount})` } : item
       )}
       toolbar={
         isAuthenticated ? (
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm text-slate-200">
+            <div className="app-pill inline-flex items-center rounded-full px-4 py-2 text-sm">
               {user?.email}
             </div>
             {user?.role !== 'portal_user' ? (
-              <Link
-                className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white"
-                to="/admin"
-              >
+              <Link className="app-btn app-btn-secondary" to="/admin">
                 Backoffice
               </Link>
             ) : null}
             <button
-              className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950"
+              className="app-btn app-btn-primary"
               onClick={() => void logout()}
               type="button"
             >
@@ -47,13 +45,10 @@ export function PortalLayout() {
           </div>
         ) : (
           <div className="flex gap-3">
-            <Link className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white" to="/login">
+            <Link className="app-btn app-btn-secondary" to="/login">
               Login
             </Link>
-            <Link
-              className="rounded-full bg-gradient-to-r from-emerald-300 to-sky-400 px-4 py-2 text-sm font-semibold text-slate-950"
-              to="/signup"
-            >
+            <Link className="app-btn app-btn-primary" to="/signup">
               Sign up
             </Link>
           </div>

@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { Surface } from '../../components/layout';
+import { AuthShell, MessageBanner } from '../../components/layout';
 import { ApiError, apiRequest } from '../../lib/api';
 
 export function ResetPasswordPage() {
@@ -60,50 +60,49 @@ export function ResetPasswordPage() {
   const title = useMemo(() => (isResetMode ? 'Set new password' : 'Forgot password'), [isResetMode]);
 
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-950 p-6 text-slate-50">
-      <Surface title={title}>
-        <div className="grid w-full max-w-md gap-4">
-          <p className="text-xs uppercase tracking-[0.28em] text-sky-300">
-            {isResetMode ? 'Reset password' : 'Reset access'}
-          </p>
-          {isResetMode ? (
-            <>
-              <label className="grid gap-2 text-sm text-slate-200">
-                New Password
-                <input className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
-              </label>
-              <label className="grid gap-2 text-sm text-slate-200">
-                Re-enter Password
-                <input className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3" onChange={(event) => setConfirmPassword(event.target.value)} type="password" value={confirmPassword} />
-              </label>
-            </>
-          ) : (
-            <label className="grid gap-2 text-sm text-slate-200">
-              Enter Email ID
-              <input className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3" onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" value={email} />
+    <AuthShell
+      eyebrow={isResetMode ? 'Reset password' : 'Reset access'}
+      title={title}
+      description="Password recovery keeps the access flow simple without exposing subscription operations to unauthorized users."
+    >
+      <div className="grid gap-4">
+        {isResetMode ? (
+          <>
+            <label className="grid gap-2 text-sm">
+              <span className="muted">New Password</span>
+              <input className="app-input" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
             </label>
-          )}
-          {message ? <p className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{message}</p> : null}
-          {error ? <p className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
-          {!isResetMode && resetLink ? (
-            <a className="rounded-2xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100" href={resetLink}>
-              Open demo reset link
-            </a>
-          ) : null}
-          <div className="flex flex-wrap gap-3">
-            <button
-              className="rounded-full bg-gradient-to-r from-sky-300 to-indigo-400 px-5 py-3 font-semibold text-slate-950"
-              onClick={() => (isResetMode ? confirmMutation.mutate() : requestMutation.mutate())}
-              type="button"
-            >
-              {isResetMode ? 'Update Password' : 'Submit'}
-            </button>
-            <Link className="rounded-full border border-white/10 bg-white/6 px-5 py-3 font-semibold text-white" to="/login">
-              Back to login
-            </Link>
-          </div>
+            <label className="grid gap-2 text-sm">
+              <span className="muted">Re-enter Password</span>
+              <input className="app-input" onChange={(event) => setConfirmPassword(event.target.value)} type="password" value={confirmPassword} />
+            </label>
+          </>
+        ) : (
+          <label className="grid gap-2 text-sm">
+            <span className="muted">Enter Email ID</span>
+            <input className="app-input" onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" value={email} />
+          </label>
+        )}
+        {message ? <MessageBanner tone="success">{message}</MessageBanner> : null}
+        {error ? <MessageBanner tone="error">{error}</MessageBanner> : null}
+        {!isResetMode && resetLink ? (
+          <a className="app-btn app-btn-secondary justify-self-start" href={resetLink}>
+            Open demo reset link
+          </a>
+        ) : null}
+        <div className="flex flex-wrap gap-3">
+          <button
+            className="app-btn app-btn-primary"
+            onClick={() => (isResetMode ? confirmMutation.mutate() : requestMutation.mutate())}
+            type="button"
+          >
+            {isResetMode ? 'Update Password' : 'Submit'}
+          </button>
+          <Link className="app-btn app-btn-secondary" to="/login">
+            Back to login
+          </Link>
         </div>
-      </Surface>
-    </div>
+      </div>
+    </AuthShell>
   );
 }

@@ -1,38 +1,73 @@
 import { Link } from 'react-router-dom';
 
+import { CalendarRepeatIcon, CreditCardIcon, CubeIcon, ReceiptIcon } from '../../components/icons';
 import { Surface } from '../../components/layout';
 import { useSession } from '../../lib/session';
+
+const highlights = [
+  {
+    title: 'Connected catalog',
+    detail: 'Products and recurring plans stay aligned for every subscription offer.',
+    icon: CubeIcon
+  },
+  {
+    title: 'Recurring cycles',
+    detail: 'Checkout, activation, invoicing, and renewals follow one consistent loop.',
+    icon: CalendarRepeatIcon
+  },
+  {
+    title: 'Accounting precision',
+    detail: 'Invoices, taxes, discounts, and payments keep commercial actions audit-friendly.',
+    icon: ReceiptIcon
+  },
+  {
+    title: 'Fast checkout',
+    detail: 'Low-noise purchase flows reduce friction from quote to first payment.',
+    icon: CreditCardIcon
+  }
+];
 
 export function HomePage() {
   const { isAuthenticated, user } = useSession();
 
   return (
-    <Surface title="Revenue subscriptions for modern teams">
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div>
-          <p className="max-w-2xl text-slate-300">
-            Create master data first, then run the full flow: signup, shop, cart, address, payment, invoice, and subscription tracking.
-          </p>
+    <Surface
+      title="Revenue subscriptions with clean operational flow"
+      description="The portal and backoffice share the same recurring commerce model: products, plans, discounts, taxes, invoices, and subscription lifecycle tracking."
+    >
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="app-card p-6">
+          <p className="eyebrow">System flow</p>
+          <div className="mt-4 grid gap-3 text-sm muted">
+            <p>1. Create or manage subscription-ready products and plans.</p>
+            <p>2. Add items to cart, confirm address, and complete payment.</p>
+            <p>3. Track subscription status, invoices, and renewals over time.</p>
+          </div>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link className="rounded-full bg-gradient-to-r from-emerald-300 to-sky-400 px-5 py-3 font-semibold text-slate-950" to={isAuthenticated ? '/shop' : '/signup'}>
+            <Link className="app-btn app-btn-primary" to={isAuthenticated ? '/shop' : '/signup'}>
               {isAuthenticated ? 'Open shop' : 'Create portal account'}
             </Link>
             {user?.role !== 'portal_user' ? (
-              <Link className="rounded-full border border-white/10 bg-white/6 px-5 py-3 font-semibold text-white" to="/admin">
+              <Link className="app-btn app-btn-secondary" to="/admin">
                 Open backoffice
               </Link>
             ) : null}
           </div>
         </div>
-        <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
-          <p className="text-sm font-semibold text-slate-200">Expected flow</p>
-          <ol className="mt-4 grid gap-3 text-sm text-slate-300">
-            <li>1. Login or signup as portal user</li>
-            <li>2. Browse products and select a recurring plan</li>
-            <li>3. Apply discount in cart and confirm address</li>
-            <li>4. Pay through the demo gateway</li>
-            <li>5. Track orders and invoices from your account</li>
-          </ol>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {highlights.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <article className="module-card" key={item.title}>
+                <div className="mb-4 inline-flex rounded-2xl bg-[linear-gradient(135deg,var(--color-primary),var(--color-secondary))] p-3 text-white">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h3 className="text-lg font-semibold tracking-[-0.03em]">{item.title}</h3>
+                <p className="mt-2 text-sm muted">{item.detail}</p>
+              </article>
+            );
+          })}
         </div>
       </div>
     </Surface>

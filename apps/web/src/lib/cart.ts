@@ -93,7 +93,7 @@ export const useCartStore = create<CartState>()(
         })
     }),
     {
-      name: 'subflow-cart'
+      name: 'veltrix-cart'
     }
   )
 );
