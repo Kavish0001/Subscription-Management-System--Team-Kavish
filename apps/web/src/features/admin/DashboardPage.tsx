@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
+import { AlertTriangleIcon, FolderStackIcon, ReceiptIcon, WalletIcon } from '../../components/icons';
 import { MetricCard, Surface } from '../../components/layout';
 import { apiRequest, formatCurrency, formatDate, type DashboardMetrics, type Invoice, type Subscription } from '../../lib/api';
 import { useSession } from '../../lib/session';
@@ -31,25 +32,29 @@ export function DashboardPage() {
     <>
       <MetricCard
         detail="Moved from confirmed checkout to active status."
+        icon={<FolderStackIcon className="h-6 w-6" />}
         label="Active subscriptions"
         value={String(metrics?.activeSubscriptions ?? 0)}
       />
       <MetricCard
         detail="Sum of paid invoices."
+        icon={<WalletIcon className="h-6 w-6" />}
         label="Revenue"
         value={formatCurrency(metrics?.revenue ?? 0)}
       />
       <MetricCard
         detail="Draft or confirmed invoices past due date."
+        icon={<AlertTriangleIcon className="h-6 w-6" />}
         label="Overdue invoices"
         value={String(metrics?.overdueInvoices ?? 0)}
       />
       <Surface
         actions={
           <Link
-            className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950"
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950"
             to="/admin/subscriptions/new"
           >
+            <FolderStackIcon className="h-4 w-4" />
             New subscription
           </Link>
         }
@@ -57,7 +62,10 @@ export function DashboardPage() {
       >
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5">
-            <p className="mb-3 text-sm font-semibold text-slate-200">Recent subscriptions</p>
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
+              <FolderStackIcon className="h-4 w-4 text-cyan-300" />
+              <p>Recent subscriptions</p>
+            </div>
             <div className="grid gap-3">
               {recentSubscriptions.map((subscription) => (
                 <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3" key={subscription.id}>
@@ -81,7 +89,10 @@ export function DashboardPage() {
             </div>
           </div>
           <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5">
-            <p className="mb-3 text-sm font-semibold text-slate-200">Recent invoices</p>
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
+              <ReceiptIcon className="h-4 w-4 text-cyan-300" />
+              <p>Recent invoices</p>
+            </div>
             <div className="grid gap-3">
               {recentInvoices.map((invoice) => (
                 <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3" key={invoice.id}>

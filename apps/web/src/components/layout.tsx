@@ -11,6 +11,7 @@ type NavigationItem = {
   to: string;
   icon?: IconComponent;
   detail?: string;
+  end?: boolean;
 };
 
 export function Shell({
@@ -27,19 +28,14 @@ export function Shell({
 }>) {
   return (
     <div className="app-shell">
-      <div className="grid min-h-screen lg:grid-cols-[304px_1fr]">
-        <aside className="app-sidebar border-b p-5 lg:border-r lg:border-b-0 lg:p-6">
+      <div className="grid min-h-screen lg:grid-cols-[272px_minmax(0,1fr)]">
+        <aside className="app-sidebar border-b p-5 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:border-r lg:border-b-0 lg:p-6">
           <BrandLockup
             caption="Connected subscription operations"
-            className="mb-8"
+            sidebar
+            className="mb-7"
             to="/"
           />
-          <div className="app-card mb-5 p-4">
-            <p className="eyebrow mb-2">Finance-grade ERP</p>
-            <p className="text-sm muted">
-              Precise recurring billing, modular controls, and low-noise workflows for backoffice teams.
-            </p>
-          </div>
           <nav className="grid gap-2">
             {navigation.map((item) => {
               const Icon = item.icon;
@@ -47,6 +43,7 @@ export function Shell({
               return (
                 <NavLink
                   key={item.to}
+                  end={item.end}
                   to={item.to}
                   className={({ isActive }) =>
                     cn(
@@ -62,20 +59,26 @@ export function Shell({
                       {Icon ? (
                         <div
                           className={cn(
-                            'grid h-10 w-10 shrink-0 place-items-center rounded-2xl transition-colors',
+                            'grid h-11 w-11 shrink-0 place-items-center rounded-[18px] transition-colors',
                             isActive
                               ? 'bg-[linear-gradient(135deg,var(--color-primary),var(--color-secondary))] text-white'
-                              : 'bg-[color:color-mix(in_srgb,var(--color-card)_90%,transparent)] text-[color:var(--color-text-secondary)]'
+                              : 'bg-[color:color-mix(in_srgb,var(--color-card)_86%,transparent)] text-[color:var(--color-text-secondary)]'
                           )}
                         >
-                          <Icon className="h-5 w-5" />
+                          <Icon className="h-[18px] w-[18px]" />
                         </div>
                       ) : null}
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold">{item.label}</p>
-                        {item.detail ? <p className="truncate text-xs muted">{item.detail}</p> : null}
+                        <p className={cn('truncate font-semibold', isActive && 'text-white')}>{item.label}</p>
                       </div>
-                      <ArrowRightIcon className="h-4 w-4 text-[color:var(--color-text-muted)] transition-transform group-hover:translate-x-0.5" />
+                      <ArrowRightIcon
+                        className={cn(
+                          'h-4 w-4 transition-all',
+                          isActive
+                            ? 'translate-x-0.5 text-white'
+                            : 'text-[color:var(--color-text-muted)] opacity-60 group-hover:translate-x-0.5 group-hover:opacity-100'
+                        )}
+                      />
                     </div>
                   )}
                 </NavLink>
@@ -83,7 +86,7 @@ export function Shell({
             })}
           </nav>
         </aside>
-        <main className="p-5 lg:p-8">
+        <main className="min-w-0 p-5 lg:p-8">
           <header className="mb-6 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="eyebrow mb-3">{subtitle}</p>
@@ -243,7 +246,9 @@ export function AuthShell({
         <div className="auth-side">
           <BrandLockup
             caption="Automated subscription ERP"
-            className="mb-10"
+            center
+            compact
+            className="mb-8"
             to="/"
           />
           <p className="eyebrow mb-3">{eyebrow}</p>
@@ -268,23 +273,56 @@ export function AuthShell({
 
 function BrandLockup({
   caption,
+  center,
   className,
+  compact,
+  sidebar,
   to
 }: {
   caption: string;
+  center?: boolean;
   className?: string;
+  compact?: boolean;
+  sidebar?: boolean;
   to: string;
 }) {
   return (
-    <Link className={cn('block', className)} to={to}>
-      <div className="overflow-hidden rounded-[28px] border border-[color:var(--color-border)] bg-white p-2 shadow-[var(--shadow-lift)]">
-        <img
-          alt="Veltrix logo"
-          className="block w-full max-w-[220px] object-contain"
-          src="/veltrix-logo.png"
-        />
-      </div>
-      <p className="mt-3 text-sm muted">{caption}</p>
+    <Link className={cn('block', center && 'mx-auto text-center', className)} to={to}>
+      {sidebar ? (
+        <div className="text-center">
+          <div className="mx-auto w-fit overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-white shadow-[var(--shadow-lift)]">
+            <img
+              alt="Veltrix logo"
+              className="block h-20 w-20 object-contain"
+              src="/veltrix-logo.png"
+            />
+          </div>
+          <p className="mt-3 text-[13px] leading-5 muted">{caption}</p>
+        </div>
+      ) : (
+        <>
+          <div
+            className={cn(
+              'overflow-hidden border border-[color:var(--color-border)] bg-white shadow-[var(--shadow-lift)]',
+              compact
+                ? 'mx-auto rounded-[22px] px-4 py-3'
+                : 'rounded-[28px] p-2'
+            )}
+          >
+            <img
+              alt="Veltrix logo"
+              className={cn(
+                'block object-contain',
+                compact
+                  ? 'mx-auto w-full max-w-[152px]'
+                  : 'w-full max-w-[220px]'
+              )}
+              src="/veltrix-logo.png"
+            />
+          </div>
+          <p className={cn('mt-3 text-sm muted', center && 'text-center')}>{caption}</p>
+        </>
+      )}
     </Link>
   );
 }

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { AlertTriangleIcon, ReceiptIcon, WalletIcon } from '../../components/icons';
 import { MetricCard, Surface } from '../../components/layout';
 import { apiRequest, formatCurrency, formatDate, type DashboardMetrics, type Invoice } from '../../lib/api';
 import { useSession } from '../../lib/session';
@@ -22,9 +23,9 @@ export function ReportsPage() {
 
   return (
     <>
-      <MetricCard label="Paid invoices" value={String(metrics?.invoicesPaid ?? 0)} detail="Successful collections." />
-      <MetricCard label="Revenue" value={formatCurrency(metrics?.revenue ?? 0)} detail="Total paid invoice amount." />
-      <MetricCard label="Overdue" value={String(metrics?.overdueInvoices ?? 0)} detail="Invoices awaiting action." />
+      <MetricCard label="Paid invoices" value={String(metrics?.invoicesPaid ?? 0)} detail="Successful collections." icon={<ReceiptIcon className="h-6 w-6" />} />
+      <MetricCard label="Revenue" value={formatCurrency(metrics?.revenue ?? 0)} detail="Total paid invoice amount." icon={<WalletIcon className="h-6 w-6" />} />
+      <MetricCard label="Overdue" value={String(metrics?.overdueInvoices ?? 0)} detail="Invoices awaiting action." icon={<AlertTriangleIcon className="h-6 w-6" />} />
       <Surface title="Invoice register">
         <div className="overflow-hidden rounded-3xl border border-white/10">
           <table className="min-w-full text-left text-sm">

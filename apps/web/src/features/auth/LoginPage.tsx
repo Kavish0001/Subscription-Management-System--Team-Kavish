@@ -32,7 +32,7 @@ export function LoginPage() {
       description="Use your backoffice or portal credentials to enter the subscription workspace."
     >
       <form
-        className="grid gap-4"
+        className="grid gap-5 auth-form-stack"
         onSubmit={form.handleSubmit(async (values) => {
           try {
             setError(null);
@@ -44,7 +44,7 @@ export function LoginPage() {
           }
         })}
       >
-        <div>
+        <div className="mb-1">
           <p className="eyebrow">Sign in</p>
           <h2 className="section-title mt-3">Continue to your workspace</h2>
         </div>
@@ -64,7 +64,7 @@ export function LoginPage() {
         >
           Login
         </button>
-        <div className="flex justify-between gap-3 text-sm">
+        <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-1 text-sm">
           <Link className="text-[color:var(--color-secondary)]" to="/signup">
             Sign up
           </Link>

@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { Surface } from '../../components/layout';
+import { CalendarRepeatIcon, CreditCardIcon, PrinterIcon, ReceiptIcon } from '../../components/icons';
+import { StatusBadge, Surface } from '../../components/layout';
 import { ApiError } from '../../lib/api';
 import { apiRequest, formatCurrency, formatDate, type Contact, type Invoice, type Subscription } from '../../lib/api';
 import { useSession } from '../../lib/session';
@@ -242,50 +243,150 @@ export function InvoiceDetailPage() {
 
   return (
     <Surface
+      className="invoice-page-shell"
       title={invoice.invoiceNumber}
       actions={
-        <div className="flex flex-wrap gap-3">
+        <div className="invoice-screen-actions flex flex-wrap gap-3">
           {invoice.subscriptionOrder ? (
             <Link className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white" to={`/account/orders/${invoice.subscriptionOrder.id}`}>
+              <ReceiptIcon className="mr-2 inline h-4 w-4" />
               Subscription
             </Link>
           ) : null}
           <button className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white" onClick={() => window.print()} type="button">
+            <PrinterIcon className="mr-2 inline h-4 w-4" />
             Print
           </button>
           {invoice.status === 'confirmed' ? (
             <button className="rounded-full bg-gradient-to-r from-sky-300 to-indigo-400 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => payMutation.mutate()} type="button">
+              <CreditCardIcon className="mr-2 inline h-4 w-4" />
               Pay
             </button>
           ) : null}
         </div>
       }
     >
-      <p className="mb-4 text-slate-300">
-        Due {formatDate(invoice.dueDate)} | Amount Due {formatCurrency(invoice.amountDue)}
-      </p>
-      <div className="overflow-hidden rounded-3xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-white/6 text-slate-300">
-            <tr>
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">Quantity</th>
-              <th className="px-4 py-3">Unit Price</th>
-              <th className="px-4 py-3">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoice.lines.map((line) => (
-              <tr className="border-t border-white/10 text-slate-100" key={line.id}>
-                <td className="px-4 py-3">{line.productNameSnapshot}</td>
-                <td className="px-4 py-3">{line.quantity}</td>
-                <td className="px-4 py-3">{formatCurrency(line.unitPrice)}</td>
-                <td className="px-4 py-3">{formatCurrency(line.lineTotal)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="invoice-screen-summary mb-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Invoice overview</p>
+              <h3 className="mt-2 text-xl font-bold text-white">{invoice.invoiceNumber}</h3>
+            </div>
+            <StatusBadge status={invoice.status} />
+          </div>
+          <div className="grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
+            <InvoiceMetaRow icon={<CalendarRepeatIcon className="h-4 w-4" />} label="Invoice date" value={formatDate(invoice.invoiceDate)} />
+            <InvoiceMetaRow icon={<CalendarRepeatIcon className="h-4 w-4" />} label="Due date" value={formatDate(invoice.dueDate)} />
+            <InvoiceMetaRow icon={<ReceiptIcon className="h-4 w-4" />} label="Reference" value={invoice.subscriptionOrder?.subscriptionNumber ?? 'Subscription'} />
+            <InvoiceMetaRow icon={<CreditCardIcon className="h-4 w-4" />} label="Amount due" value={formatCurrency(invoice.amountDue)} />
+          </div>
+        </div>
+        <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Payment summary</p>
+          <div className="mt-4 grid gap-3">
+            <SummaryRow label="Subtotal" value={formatCurrency(invoice.subtotalAmount)} />
+            <SummaryRow label="Discount" value={formatCurrency(invoice.discountAmount)} />
+            <SummaryRow label="Tax" value={formatCurrency(invoice.taxAmount)} />
+            <SummaryRow label="Total" value={formatCurrency(invoice.totalAmount)} />
+            <SummaryRow label="Paid" value={formatCurrency(invoice.paidAmount)} />
+            <SummaryRow label="Amount due" value={formatCurrency(invoice.amountDue)} />
+          </div>
+        </div>
       </div>
+
+      <article className="invoice-print-sheet">
+        <div className="invoice-doc-header">
+          <div>
+            <p className="invoice-doc-kicker">Veltrix Subscription ERP</p>
+            <h2>Tax Invoice</h2>
+            <p className="invoice-doc-muted">
+              Source: {invoice.sourceLabel} {invoice.paymentTermLabel ? `| Payment term: ${invoice.paymentTermLabel}` : ''}
+            </p>
+          </div>
+          <div className="invoice-doc-badge">
+            <span>Invoice No.</span>
+            <strong>{invoice.invoiceNumber}</strong>
+          </div>
+        </div>
+
+        <div className="invoice-doc-meta">
+          <div className="invoice-doc-panel">
+            <p className="invoice-doc-label">Invoice details</p>
+            <div className="invoice-doc-list">
+              <InvoicePrintRow label="Invoice number" value={invoice.invoiceNumber} />
+              <InvoicePrintRow label="Status" value={invoice.status.toUpperCase()} />
+              <InvoicePrintRow label="Invoice date" value={formatDate(invoice.invoiceDate)} />
+              <InvoicePrintRow label="Due date" value={formatDate(invoice.dueDate)} />
+            </div>
+          </div>
+          <div className="invoice-doc-panel">
+            <p className="invoice-doc-label">Subscription reference</p>
+            <div className="invoice-doc-list">
+              <InvoicePrintRow label="Order number" value={invoice.subscriptionOrder?.subscriptionNumber ?? 'Subscription'} />
+              <InvoicePrintRow label="Source label" value={invoice.sourceLabel} />
+              <InvoicePrintRow label="Currency" value={invoice.currencyCode} />
+              <InvoicePrintRow label="Payment term" value={invoice.paymentTermLabel ?? 'Standard'} />
+            </div>
+          </div>
+        </div>
+
+        <div className="invoice-doc-table-shell">
+          <table className="invoice-doc-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Unit Price</th>
+                <th>Line Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.lines.map((line) => (
+                <tr key={line.id}>
+                  <td>{line.productNameSnapshot}</td>
+                  <td>{line.quantity}</td>
+                  <td>{formatCurrency(line.unitPrice)}</td>
+                  <td>{formatCurrency(line.lineTotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="invoice-doc-footer">
+          <div className="invoice-doc-panel">
+            <p className="invoice-doc-label">Payments</p>
+            {invoice.payments.length > 0 ? (
+              <div className="invoice-doc-payments">
+                {invoice.payments.map((payment) => (
+                  <div className="invoice-doc-payment" key={payment.id}>
+                    <div>
+                      <strong>{payment.paymentReference}</strong>
+                      <p>{payment.paymentMethod} via {payment.provider}</p>
+                    </div>
+                    <div className="invoice-doc-payment-amount">
+                      <strong>{formatCurrency(payment.amount)}</strong>
+                      <p>{payment.paidAt ? formatDate(payment.paidAt) : payment.status}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="invoice-doc-muted">No recorded payments yet.</p>
+            )}
+          </div>
+
+          <div className="invoice-doc-totals">
+            <InvoicePrintRow label="Subtotal" value={formatCurrency(invoice.subtotalAmount)} />
+            <InvoicePrintRow label="Discount" value={formatCurrency(invoice.discountAmount)} />
+            <InvoicePrintRow label="Tax" value={formatCurrency(invoice.taxAmount)} />
+            <InvoicePrintRow label="Total" value={formatCurrency(invoice.totalAmount)} />
+            <InvoicePrintRow label="Paid" value={formatCurrency(invoice.paidAmount)} />
+            <InvoicePrintRow label="Amount due" value={formatCurrency(invoice.amountDue)} strong />
+          </div>
+        </div>
+      </article>
     </Surface>
   );
 }
@@ -482,6 +583,43 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
       <span>{label}</span>
       <span className="text-right text-white">{value}</span>
+    </div>
+  );
+}
+
+function InvoiceMetaRow({
+  icon,
+  label,
+  value
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
+      <div className="mt-0.5 text-cyan-300">{icon}</div>
+      <div>
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
+        <p className="mt-1 font-medium text-white">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function InvoicePrintRow({
+  label,
+  value,
+  strong = false
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="invoice-doc-row">
+      <span>{label}</span>
+      <strong className={strong ? 'invoice-doc-strong' : undefined}>{value}</strong>
     </div>
   );
 }

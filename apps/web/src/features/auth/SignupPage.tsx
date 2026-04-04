@@ -53,7 +53,7 @@ export function SignupPage() {
           }
         )}
       >
-        <div>
+        <div className="mb-1">
           <p className="eyebrow">Create account</p>
           <h2 className="section-title mt-3">Provision your portal identity</h2>
         </div>
@@ -96,10 +96,7 @@ export function SignupPage() {
         >
           Sign up
         </button>
-        <button className="app-btn app-btn-secondary" type="button">
-          Continue with Google
-        </button>
-        <div className="text-sm">
+        <div className="pt-1 text-center text-sm">
           <Link className="text-[color:var(--color-secondary)]" to="/login">
             Already have an account?
           </Link>

@@ -11,6 +11,15 @@ import { useSession } from '../../lib/session';
 const checkoutAddressKey = 'veltrix-checkout-address';
 const fieldClass = 'rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3';
 
+type CheckoutAddress = {
+  line1: string;
+  line2?: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+};
+
 export function CartPage() {
   const items = useCartStore((state) => state.items);
   const discountCode = useCartStore((state) => state.discountCode);
@@ -30,33 +39,33 @@ export function CartPage() {
       {items.length === 0 ? (
         <p className="text-slate-300">Your cart is empty. Add a product from the shop first.</p>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="grid gap-4">
             {items.map((item) => (
               <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5" key={`${item.productId}-${item.recurringPlanId}`}>
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-xl font-semibold text-white">{item.name}</p>
-                    <p className="text-sm text-slate-400">{item.recurringPlanName}</p>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="break-words text-xl font-semibold text-white">{item.name}</p>
+                    <p className="mt-1 text-sm text-slate-400">{item.recurringPlanName}</p>
+                    <p className="mt-3 text-sm text-slate-300">{formatCurrency(item.unitPrice)} each</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3 lg:justify-end">
                     <input className={`${fieldClass} w-24`} min={1} onChange={(event) => updateQuantity(item.productId, item.recurringPlanId, Number(event.target.value))} type="number" value={item.quantity} />
                     <button className="rounded-full border border-white/10 px-4 py-3 text-sm text-white" onClick={() => removeItem(item.productId, item.recurringPlanId)} type="button">
                       Remove
                     </button>
                   </div>
                 </div>
-                <p className="mt-3 text-sm text-slate-300">{formatCurrency(item.unitPrice)} each</p>
               </div>
             ))}
           </div>
-          <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
+          <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5 xl:sticky xl:top-8 xl:self-start">
             <label className="grid gap-2 text-sm text-slate-200">
               Discount code
-              <div className="flex gap-3">
-                <input className={fieldClass} onChange={(event) => setCodeInput(event.target.value)} value={codeInput} />
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input className={`${fieldClass} min-w-0 flex-1`} onChange={(event) => setCodeInput(event.target.value)} value={codeInput} />
                 <button
-                  className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-full bg-white/10 px-4 py-3 text-sm font-semibold text-white"
                   onClick={() => setDiscountMessage(applyDiscount(codeInput) ? 'Discount applied.' : 'Invalid code.')}
                   type="button"
                 >
@@ -101,15 +110,13 @@ export function CheckoutAddressPage() {
       {items.length === 0 ? (
         <p className="text-slate-300">Cart is empty.</p>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="grid gap-4">
             <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
               <p className="text-sm font-semibold text-slate-200">Default address</p>
               {defaultAddress ? (
-                <div className="mt-3 text-sm text-slate-300">
-                  <p>{defaultAddress.line1}</p>
-                  <p>{defaultAddress.city}, {defaultAddress.state}</p>
-                  <p>{defaultAddress.postalCode}, {defaultAddress.country}</p>
+                <div className="mt-3">
+                  <AddressPreview address={defaultAddress} />
                 </div>
               ) : (
                 <p className="mt-3 text-sm text-slate-400">No default address found.</p>
@@ -202,17 +209,19 @@ export function CheckoutPaymentPage() {
       {items.length === 0 ? (
         <p className="text-slate-300">Cart is empty.</p>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
             <p className="mb-4 text-slate-300">Demo gateway is active for the hackathon flow.</p>
-            <select className={`${fieldClass} mb-4`} onChange={(event) => setPaymentMethod(event.target.value)} value={paymentMethod}>
+            <select className={`${fieldClass} mb-4 max-w-[220px]`} onChange={(event) => setPaymentMethod(event.target.value)} value={paymentMethod}>
               <option value="card">Card</option>
               <option value="upi">UPI</option>
               <option value="netbanking">Net Banking</option>
             </select>
             <div className="rounded-[24px] border border-white/10 bg-white/6 p-4 text-sm text-slate-300">
               <p className="font-semibold text-white">Delivery / invoice address</p>
-              <pre className="mt-3 whitespace-pre-wrap font-sans text-sm">{window.sessionStorage.getItem(checkoutAddressKey) ?? 'Default address will be used.'}</pre>
+              <div className="mt-3">
+                <AddressBlock />
+              </div>
             </div>
             {error ? <p className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p> : null}
           </div>
@@ -266,7 +275,7 @@ function SummaryCard({ actions }: { actions?: React.ReactNode }) {
   const total = taxableAmount + taxAmount;
 
   return (
-    <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
+    <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5 xl:sticky xl:top-8 xl:self-start">
       <div className="grid gap-2 text-slate-200">
         <p>Subtotal: {formatCurrency(subtotal)}</p>
         <p>Discount: {formatCurrency(discountAmount)}</p>
@@ -274,6 +283,39 @@ function SummaryCard({ actions }: { actions?: React.ReactNode }) {
         <p className="text-lg font-semibold">Total: {formatCurrency(total)}</p>
       </div>
       <div className="mt-5">{actions}</div>
+    </div>
+  );
+}
+
+function AddressBlock() {
+  const rawAddress = window.sessionStorage.getItem(checkoutAddressKey);
+
+  if (!rawAddress) {
+    return <p className="text-sm text-slate-400">Default address will be used.</p>;
+  }
+
+  try {
+    const parsed = JSON.parse(rawAddress) as CheckoutAddress | null;
+
+    if (!parsed?.line1) {
+      return <p className="text-sm text-slate-400">Default address will be used.</p>;
+    }
+
+    return <AddressPreview address={parsed} />;
+  } catch {
+    return <p className="text-sm text-slate-400">Default address will be used.</p>;
+  }
+}
+
+function AddressPreview({ address }: { address: CheckoutAddress }) {
+  return (
+    <div className="rounded-[20px] border border-white/8 bg-slate-950/30 px-4 py-3 text-sm text-slate-300">
+      <p className="break-words text-white">{address.line1}</p>
+      {address.line2 ? <p className="mt-1 break-words">{address.line2}</p> : null}
+      <p className="mt-1 break-words">
+        {address.city}, {address.state} {address.postalCode}
+      </p>
+      <p className="mt-1">{address.country}</p>
     </div>
   );
 }

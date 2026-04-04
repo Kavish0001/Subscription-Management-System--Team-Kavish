@@ -194,6 +194,65 @@ export function ArrowRightIcon(props: IconProps) {
   );
 }
 
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </IconBase>
+  );
+}
+
+export function LogOutIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M10 17v2a2 2 0 0 0 2 2h6" />
+      <path d="M18 3h-6a2 2 0 0 0-2 2v2" />
+      <path d="M15 12H3" />
+      <path d="m7 8-4 4 4 4" />
+    </IconBase>
+  );
+}
+
+export function WalletIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19a1 1 0 0 1 1 1v3H6.5A2.5 2.5 0 0 0 4 11.5v5A2.5 2.5 0 0 0 6.5 19H20v-3" />
+      <path d="M20 9H6.5A2.5 2.5 0 0 0 4 11.5v0A2.5 2.5 0 0 0 6.5 14H20V9Z" />
+      <circle cx="16" cy="11.5" r="0.5" fill="currentColor" stroke="none" />
+    </IconBase>
+  );
+}
+
+export function AlertTriangleIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 4 3.7 18.2A1.3 1.3 0 0 0 4.8 20h14.4a1.3 1.3 0 0 0 1.1-1.8L12 4Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </IconBase>
+  );
+}
+
+export function FolderStackIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 7.5h5l1.5 2H20v8.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7.5Z" />
+      <path d="M4 7.5V6a2 2 0 0 1 2-2h4l1.5 2H18a2 2 0 0 1 2 2v1.5" />
+    </IconBase>
+  );
+}
+
+export function PrinterIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M7 8V4h10v4" />
+      <rect x="5" y="14" width="14" height="6" rx="2" />
+      <rect x="3" y="8" width="18" height="8" rx="2" />
+      <path d="M17 12h.01" />
+    </IconBase>
+  );
+}
+
 export function MoonIcon(props: IconProps) {
   return (
     <IconBase {...props}>

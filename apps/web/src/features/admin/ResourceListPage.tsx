@@ -27,6 +27,7 @@ export function ResourceListPage({
     name: '',
     slug: '',
     description: '',
+    imageUrl: '',
     baseSalesPrice: '999',
     costPrice: '249'
   });
@@ -99,6 +100,7 @@ export function ResourceListPage({
             name: productForm.name,
             slug: productForm.slug || slugify(productForm.name),
             description: productForm.description,
+            imageUrl: productForm.imageUrl || undefined,
             productType: 'service',
             baseSalesPrice: Number(productForm.baseSalesPrice),
             costPrice: Number(productForm.costPrice),
@@ -142,6 +144,16 @@ export function ResourceListPage({
     onSuccess: async () => {
       setError(null);
       setIsCreating(false);
+      if (resource === 'products') {
+        setProductForm({
+          name: '',
+          slug: '',
+          description: '',
+          imageUrl: '',
+          baseSalesPrice: '999',
+          costPrice: '249'
+        });
+      }
       await queryClient.invalidateQueries({
         queryKey:
           resource === 'products'
@@ -228,6 +240,27 @@ export function ResourceListPage({
               </Field>
               <Field label="Slug">
                 <input className={fieldClass} onChange={(event) => setProductForm((value) => ({ ...value, slug: event.target.value }))} value={productForm.slug} />
+              </Field>
+              <Field label="Image URL">
+                <div className="grid gap-3">
+                  <input
+                    className={fieldClass}
+                    onChange={(event) => setProductForm((value) => ({ ...value, imageUrl: event.target.value }))}
+                    placeholder="https://example.com/product-image.jpg"
+                    value={productForm.imageUrl}
+                  />
+                  {productForm.imageUrl ? (
+                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/30 p-2">
+                      <img
+                        alt={productForm.name || 'Product preview'}
+                        className="h-36 w-full rounded-xl object-cover"
+                        src={productForm.imageUrl}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400">Paste a public image link to show the product image in the shop cards.</p>
+                  )}
+                </div>
               </Field>
               <Field label="Description">
                 <textarea className={fieldClass} onChange={(event) => setProductForm((value) => ({ ...value, description: event.target.value }))} rows={4} value={productForm.description} />
