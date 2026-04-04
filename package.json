@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.25.1",
+    "@types/supertest": "^6.0.3",
     "eslint": "^9.25.1",
     "eslint-config-prettier": "^10.1.2",
     "eslint-plugin-import": "^2.31.0",
@@ -23,9 +24,12 @@
     "eslint-plugin-unused-imports": "^4.1.4",
     "globals": "^16.0.0",
     "husky": "^9.1.7",
+    "jsdom": "^26.1.0",
     "lint-staged": "^15.5.0",
     "prettier": "^3.5.3",
+    "supertest": "^7.1.0",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.30.1"
+    "typescript-eslint": "^8.30.1",
+    "vitest": "^3.1.2"
   }
 }

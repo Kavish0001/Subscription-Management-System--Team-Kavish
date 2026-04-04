@@ -3,23 +3,60 @@ name: CD
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
-  release:
+  package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
           version: 10.11.0
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: docker build -f apps/api/Dockerfile -t subscription-api:${{ github.sha }} .
-      - run: docker build -f apps/worker/Dockerfile -t subscription-worker:${{ github.sha }} .
-      - run: pnpm --filter @subscription/api prisma:generate
-      - run: pnpm --filter @subscription/api prisma:migrate:deploy
-      - run: pnpm --filter @subscription/web build
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @subscription/api prisma:generate
+
+      - name: Verify repository
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm build
+
+      - name: Build API image
+        run: docker build -f apps/api/Dockerfile -t veltrix-api:${{ github.sha }} .
+
+      - name: Build worker image
+        run: docker build -f apps/worker/Dockerfile -t veltrix-worker:${{ github.sha }} .
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veltrix-web-dist
+          path: apps/web/dist
+
+      - name: Upload API artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veltrix-api-dist
+          path: apps/api/dist
+
+      - name: Upload worker artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veltrix-worker-dist
+          path: apps/worker/dist

@@ -14,7 +14,6 @@ const fieldClass = 'rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3
 export function CartPage() {
   const items = useCartStore((state) => state.items);
   const discountCode = useCartStore((state) => state.discountCode);
-  const discountPercent = useCartStore((state) => state.discountPercent);
   const applyDiscount = useCartStore((state) => state.applyDiscount);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
@@ -157,7 +156,6 @@ export function CheckoutPaymentPage() {
   const items = useCartStore((state) => state.items);
   const clearCart = useCartStore((state) => state.clear);
   const discountCode = useCartStore((state) => state.discountCode);
-  const discountPercent = useCartStore((state) => state.discountPercent);
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [error, setError] = useState<string | null>(null);
 

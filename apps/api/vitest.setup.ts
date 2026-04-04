@@ -1,0 +1,12 @@
+process.env.PORT ??= '4000';
+process.env.APP_URL ??= 'http://localhost:5173';
+process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@localhost:5432/veltrix_test';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.JWT_ACCESS_SECRET ??= 'test-access-secret-12345';
+process.env.JWT_REFRESH_SECRET ??= 'test-refresh-secret-12345';
+process.env.ACCESS_TOKEN_TTL ??= '15m';
+process.env.REFRESH_TOKEN_TTL ??= '7d';
+process.env.ADMIN_EMAIL ??= 'admin@example.com';
+process.env.ADMIN_PASSWORD ??= 'Admin@1234';
+process.env.ADMIN_NAME ??= 'System Admin';
+process.env.MAIL_FROM ??= 'no-reply@example.com';

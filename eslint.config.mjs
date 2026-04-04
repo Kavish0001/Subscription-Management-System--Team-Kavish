@@ -44,4 +44,18 @@ export default tseslint.config(
       '@typescript-eslint/no-namespace': 'off',
     },
   },
+  {
+    files: ['**/*.{test,spec}.{ts,tsx}', '**/vitest.setup.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.vitest,
+      },
+    },
+  },
+  {
+    files: ['apps/web/src/lib/session.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 );

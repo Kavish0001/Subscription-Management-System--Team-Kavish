@@ -1,5 +1,5 @@
-import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { Router, type Response } from 'express';
+import jwt, { type JwtPayload } from 'jsonwebtoken';
 
 import { confirmPasswordReset, login, logout, refreshSession, requestPasswordReset, signup } from './auth.service.js';
 import { requireAuth, type AuthenticatedRequest } from '../../middleware/auth.js';

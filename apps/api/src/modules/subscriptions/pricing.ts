@@ -192,7 +192,7 @@ export async function buildSubscriptionPricing(
   const lastEligibleIndex = eligibleIndexList[eligibleIndexList.length - 1] ?? -1;
 
   let remainingDiscount = totalDiscount;
-  const lines = preparedLines.map((line, index) => {
+  const lines = preparedLines.map((line) => {
     const isEligible = eligibleLineIndexes.has(line.index);
     const proportionalDiscount =
       !isEligible || eligibleSubtotal === 0

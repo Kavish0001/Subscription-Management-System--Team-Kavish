@@ -276,14 +276,15 @@ function BrandLockup({
   to: string;
 }) {
   return (
-    <Link className={cn('flex items-center gap-4', className)} to={to}>
-      <div className="grid h-14 w-14 place-items-center overflow-hidden rounded-2xl bg-white px-2 shadow-[var(--shadow-lift)]">
-        <img alt="Veltrix logo" className="w-full object-contain" src="/veltrix-logo.svg" />
+    <Link className={cn('block', className)} to={to}>
+      <div className="overflow-hidden rounded-[28px] border border-[color:var(--color-border)] bg-white p-2 shadow-[var(--shadow-lift)]">
+        <img
+          alt="Veltrix logo"
+          className="block w-full max-w-[220px] object-contain"
+          src="/veltrix-logo.png"
+        />
       </div>
-      <div>
-        <p className="text-lg font-semibold tracking-[-0.03em]">Veltrix</p>
-        <p className="text-sm muted">{caption}</p>
-      </div>
+      <p className="mt-3 text-sm muted">{caption}</p>
     </Link>
   );
 }

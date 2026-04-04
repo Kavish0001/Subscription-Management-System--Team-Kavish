@@ -9,7 +9,6 @@ import { TaxListPage } from '../features/admin/TaxListPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { SignupPage } from '../features/auth/SignupPage';
-import { RequireAuth, RequireGuest } from '../lib/session';
 import { PortalLayout } from '../features/portal/PortalLayout';
 import {
   CartPage,
@@ -25,6 +24,7 @@ import {
   SubscriptionPreviewPage,
   ShopPage
 } from '../features/portal/PortalPages';
+import { RequireAuth, RequireGuest } from '../lib/session';
 
 export const router = createBrowserRouter([
   {
