@@ -309,7 +309,7 @@ export function PeoplePage() {
         </div>
 
         <DragScrollArea>
-          <div className="min-w-[1320px]">
+          <div className="w-max min-w-full">
             <div className="grid grid-cols-[220px_120px_110px_220px_220px_220px_130px_130px_140px] gap-4 bg-white/6 px-5 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
               <span>User</span>
               <span>Role</span>
@@ -383,7 +383,7 @@ export function PeoplePage() {
         </div>
 
         <DragScrollArea>
-          <div className="min-w-[960px]">
+          <div className="w-max min-w-full">
             <div className="grid grid-cols-[220px_220px_140px_180px_140px_120px] gap-4 bg-white/6 px-5 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
               <span>Contact</span>
               <span>Email</span>

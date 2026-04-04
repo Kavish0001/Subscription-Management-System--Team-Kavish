@@ -210,7 +210,7 @@ export function ResourceListPage({
   });
 
   const workflowMutation = useMutation({
-    mutationFn: async (input: { action: 'send-quotation' | 'confirm' | 'invoice' | 'renew' | 'upsell' | 'cancel' | 'close' | 'reopen'; subscription: Subscription }) => {
+    mutationFn: async (input: { action: 'send-quotation' | 'confirm' | 'invoice' | 'renew' | 'upsell' | 'cancel' | 'close' | 'reopen' | 'pause' | 'resume'; subscription: Subscription }) => {
       if (input.action === 'invoice') {
         return apiRequest('/invoices', {
           token,
@@ -679,7 +679,7 @@ export function ResourceListPage({
                               {latestInvoice?.status}
                             </span>
                           ) : null}
-                          {['confirmed', 'in_progress', 'closed'].includes(subscription.status) ? (
+                          {['confirmed', 'in_progress', 'closed'].includes(subscription.status) && subscription.recurringPlan?.isRenewable ? (
                             <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'renew', subscription })} type="button">
                               Renew
                             </button>
@@ -689,9 +689,19 @@ export function ResourceListPage({
                               Upsell
                             </button>
                           ) : null}
-                          {['confirmed', 'in_progress'].includes(subscription.status) ? (
+                          {['confirmed', 'in_progress'].includes(subscription.status) && subscription.recurringPlan?.isClosable ? (
                             <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'close', subscription })} type="button">
                               Close
+                            </button>
+                          ) : null}
+                          {['confirmed', 'in_progress'].includes(subscription.status) && subscription.recurringPlan?.isPausable ? (
+                            <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'pause', subscription })} type="button">
+                              Pause
+                            </button>
+                          ) : null}
+                          {subscription.status === 'paused' && subscription.recurringPlan?.isPausable ? (
+                            <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'resume', subscription })} type="button">
+                              Resume
                             </button>
                           ) : null}
                           {subscription.status === 'closed' ? (

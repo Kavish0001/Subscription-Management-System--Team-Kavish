@@ -518,7 +518,6 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
         name: true
       }
     });
-    const productsById = new Map(products.map((product) => [product.id, product]));
 
     if (products.length !== productIds.length) {
       throw new AppError('One or more products could not be found', 404, 'PRODUCT_NOT_FOUND');
@@ -532,18 +531,15 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
           return expiry;
         })()
       : defaultQuotationExpiry(now);
-    const pricing =
-      authRequest.auth?.role === 'portal_user'
-        ? await buildSubscriptionPricing(prisma, {
-            recurringPlanId: resolvedRecurringPlanId,
-            discountCode: payload.discountCode,
-            lines: payload.lines.map((line) => ({
-              productId: line.productId,
-              variantId: line.variantId,
-              quantity: line.quantity
-            }))
-          })
-        : null;
+    const pricing = await buildSubscriptionPricing(prisma, {
+      recurringPlanId: resolvedRecurringPlanId,
+      discountCode: payload.discountCode,
+      lines: payload.lines.map((line) => ({
+        productId: line.productId,
+        variantId: line.variantId,
+        quantity: line.quantity
+      }))
+    });
 
     const subscription = await prisma.subscriptionOrder.create({
       data: {
@@ -560,46 +556,13 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
         startDate: null,
         nextInvoiceDate: null,
         paymentTermLabel: resolvedPaymentTermLabel,
-        subtotalAmount:
-          pricing?.subtotalAmount ??
-          new Prisma.Decimal(
-            payload.lines.reduce(
-              (sum: number, line: (typeof payload.lines)[number]) => sum + line.quantity * line.unitPrice,
-              0,
-            ),
-          ),
-        discountAmount: pricing?.discountAmount ?? new Prisma.Decimal(0),
-        taxAmount:
-          pricing?.taxAmount ??
-          new Prisma.Decimal(
-            payload.lines.reduce(
-              (sum: number, line: (typeof payload.lines)[number]) => sum + line.quantity * line.unitPrice * 0.18,
-              0,
-            ),
-          ),
-        totalAmount:
-          pricing?.totalAmount ??
-          new Prisma.Decimal(
-            payload.lines.reduce(
-              (sum: number, line: (typeof payload.lines)[number]) => sum + line.quantity * line.unitPrice * 1.18,
-              0,
-            ),
-          ),
+        subtotalAmount: pricing.subtotalAmount,
+        discountAmount: pricing.discountAmount,
+        taxAmount: pricing.taxAmount,
+        totalAmount: pricing.totalAmount,
         notes: payload.notes,
         lines: {
-          create:
-            pricing?.lines ??
-            payload.lines.map((line: (typeof payload.lines)[number], index: number) => ({
-              productId: line.productId,
-              variantId: line.variantId,
-              productNameSnapshot: productsById.get(line.productId)?.name ?? `Line ${index + 1}`,
-              quantity: line.quantity,
-              unitPrice: new Prisma.Decimal(line.unitPrice),
-              discountAmount: new Prisma.Decimal(0),
-              taxAmount: new Prisma.Decimal(line.quantity * line.unitPrice * 0.18),
-              lineTotal: new Prisma.Decimal(line.quantity * line.unitPrice * 1.18),
-              sortOrder: index
-            }))
+          create: pricing.lines
         }
       },
       include: subscriptionInclude

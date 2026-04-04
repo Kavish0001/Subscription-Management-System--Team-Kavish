@@ -31,7 +31,8 @@ describe('cart store', () => {
 
   it('applies and clears discount codes', () => {
     expect(useCartStore.getState().applyDiscount(' welcome10 ')).toBe(true);
-    expect(useCartStore.getState().discountPercent).toBe(10);
+    expect(useCartStore.getState().discountCode).toBe('WELCOME10');
+    expect(useCartStore.getState().discountPercent).toBe(0);
 
     useCartStore.getState().clearDiscount();
 

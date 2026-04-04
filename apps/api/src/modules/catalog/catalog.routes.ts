@@ -66,8 +66,7 @@ const productAdminQuery = Prisma.validator<Prisma.ProductDefaultArgs>()({
     productTaxRules: {
       include: {
         taxRule: true
-      },
-      orderBy: [{ createdAt: 'asc' }]
+      }
     },
     _count: {
       select: {

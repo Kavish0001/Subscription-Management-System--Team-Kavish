@@ -172,9 +172,9 @@ export const adminProductSchema = z.object({
   const recurringKeys = new Set<string>();
   input.recurringPrices.forEach((entry, index) => {
     const key = [
-      entry.planName.toLowerCase(),
+      entry.recurringPlanId ?? entry.planName.toLowerCase(),
       entry.billingPeriod,
-      entry.startDate.toISOString(),
+      entry.startDate?.toISOString() ?? 'open',
       entry.endDate?.toISOString() ?? 'open',
     ].join('|');
 
@@ -293,6 +293,11 @@ export const portalCheckoutSchema = z.object({
       }),
     )
     .min(1),
+});
+
+export const portalCheckoutSummarySchema = z.object({
+  discountCode: z.string().max(50).optional(),
+  lines: portalCheckoutSchema.shape.lines,
 });
 
 export const createInvoiceSchema = z.object({

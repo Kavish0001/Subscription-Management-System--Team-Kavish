@@ -374,6 +374,7 @@ export function ProductPage() {
   const addItem = useCartStore((state) => state.addItem);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [selectedVariantId, setSelectedVariantId] = useState('');
+  const [quantity, setQuantity] = useState(1);
 
   const productsQuery = useQuery({
     queryKey: ['product-detail', slug],
@@ -392,11 +393,12 @@ export function ProductPage() {
   }
 
   const product = productsQuery.data ?? null;
-  const activePlanId = selectedPlanId || (product ? defaultPlanId(product) : '');
+  const planOptions = product ? productPlanOptions(product, plansQuery.data ?? []) : [];
+  const activePlanId = selectedPlanId || planOptions[0]?.recurringPlanId || '';
   const variants = product ? productVariants(product) : [];
   const activeVariantId = selectedVariantId || variants[0]?.id || '';
   const activeVariant = variants.find((entry) => entry.id === activeVariantId);
-  const plan = plansQuery.data?.find((entry) => entry.id === activePlanId) ?? null;
+  const plan = planOptions.find((entry) => entry.recurringPlanId === activePlanId)?.recurringPlan ?? null;
   const images = product ? productImages(product) : [];
   const hasPlanPricing = Boolean(product?.planPricing.length);
 
@@ -410,115 +412,156 @@ export function ProductPage() {
 
   return (
     <div className="grid gap-6">
-      <div className="rounded-[34px] border border-slate-200 bg-white p-6 shadow-[0_20px_50px_rgba(15,23,42,0.06)] sm:p-8">
-        <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-          <div>
-            {images.length ? (
-              <ProductSlideshow className="h-96 w-full rounded-[28px] border border-slate-200" images={images} name={product.name} />
-            ) : (
-              <div className="grid h-96 place-items-center rounded-[28px] border border-slate-200 bg-slate-100 text-slate-400">
-                <CubeIcon className="h-12 w-12" />
-              </div>
-            )}
-          </div>
+      <section className="rounded-[34px] border border-emerald-900/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(240,253,250,0.88))] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] sm:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Product detail</p>
+        <p className="mt-3 text-sm text-slate-500">
+          <Link className="hover:text-emerald-700" to="/shop">
+            All products
+          </Link>
+          {' / '}
+          {product.category?.name ?? 'Catalog'}
+          {' / '}
+          <span className="text-slate-950">{product.name}</span>
+        </p>
 
-          <div>
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_420px]">
+          <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
+            <ProductMediaGallery images={images} name={product.name} />
+          </section>
+
+          <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              <span className="rounded-full bg-slate-100 px-3 py-1">
-                {product.category?.name ?? 'Catalog'}
-              </span>
+              <span className="rounded-full bg-slate-100 px-3 py-1">{product.category?.name ?? 'Catalog'}</span>
               <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
                 {formatProductType(product.productType)}
               </span>
             </div>
 
             <h1 className="mt-4 text-4xl font-black tracking-[-0.06em] text-slate-950">{product.name}</h1>
-            <p className="mt-4 text-sm leading-7 text-slate-600">{product.description}</p>
+            <p className="mt-4 text-sm leading-7 text-slate-600">
+              {product.description ?? 'Subscription-ready product with recurring billing support.'}
+            </p>
 
-            <div className="mt-6 rounded-[28px] border border-emerald-100 bg-emerald-50/70 p-5">
-              {hasPlanPricing ? (
-                <>
-                  <select
-                    className={fieldClass}
-                    onChange={(event) => setSelectedPlanId(event.target.value)}
-                    value={activePlanId}
-                  >
-                    {product.planPricing.map((pricing) => {
-                      const linkedPlan = plansQuery.data?.find((entry) => entry.id === pricing.recurringPlanId);
-
-                      return (
-                        <option key={pricing.id} value={pricing.recurringPlanId}>
-                          {linkedPlan?.name ?? 'Plan'} - {formatCurrency(pricing.overridePrice ?? product.baseSalesPrice)}
-                        </option>
-                      );
-                    })}
-                  </select>
-
-                  <strong className="mt-5 block text-4xl font-black tracking-[-0.06em] text-slate-950">
-                    {formatCurrency(productPrice(product, activePlanId, activeVariantId))}
-                  </strong>
-                  <p className="mt-2 inline-flex items-center gap-2 text-sm text-emerald-800">
-                    <CalendarRepeatIcon className="h-4 w-4" />
-                    {plan ? `Billed every ${planIntervalLabel(plan)}` : 'Recurring billing'}
+            <div className="mt-6 rounded-[28px] border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">Pricing options</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
+                    Select a billing plan
                   </p>
-                </>
+                </div>
+                <strong className="text-3xl font-black tracking-[-0.05em] text-slate-950">
+                  {formatCurrency(productPrice(product, activePlanId, activeVariantId))}
+                </strong>
+              </div>
+
+              {hasPlanPricing ? (
+                <div className="mt-4 grid gap-3">
+                  {planOptions.map((option) => (
+                    <button
+                      className={`grid gap-2 rounded-[24px] border px-4 py-4 text-left transition ${
+                        option.recurringPlanId === activePlanId
+                          ? 'border-emerald-200 bg-emerald-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                      key={option.recurringPlanId}
+                      onClick={() => setSelectedPlanId(option.recurringPlanId)}
+                      type="button"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-950">{option.recurringPlan?.name ?? 'Plan'}</p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {option.recurringPlan
+                              ? `Billed every ${planIntervalLabel(option.recurringPlan)}`
+                              : 'Recurring billing'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-slate-950">{formatCurrency(option.price)}</p>
+                          <p className="mt-1 text-sm text-slate-500">{option.perIntervalLabel}</p>
+                        </div>
+                      </div>
+                      {option.savingsPercent > 0 ? (
+                        <span className="inline-flex w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                          Save {option.savingsPercent}%
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
               ) : (
-                <div className="rounded-[20px] border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
+                <div className="mt-4 rounded-[20px] border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
                   Billing plan not assigned yet.
                 </div>
               )}
             </div>
 
             {variants.length ? (
-              <select
-                className={`${fieldClass} mt-5`}
-                onChange={(event) => setSelectedVariantId(event.target.value)}
-                value={activeVariantId}
+              <div className="mt-6">
+                <p className="text-sm font-semibold text-slate-950">Variants available</p>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  {variants.map((variant) => (
+                    <button
+                      className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                        variant.id === activeVariantId
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                      key={variant.id}
+                      onClick={() => setSelectedVariantId(variant.id ?? '')}
+                      type="button"
+                    >
+                      {variant.attribute}: {variant.value}
+                      {Number(variant.extraPrice) > 0 ? ` (+${formatCurrency(variant.extraPrice)})` : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <QuantityStepper onChange={setQuantity} value={quantity} />
+              <button
+                className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                disabled={!hasPlanPricing}
+                onClick={() =>
+                  addItem({
+                    productId: product.id,
+                    slug: product.slug,
+                    name: product.name,
+                    imageUrl: images[0] ?? product.imageUrl,
+                    recurringPlanId: activePlanId || null,
+                    recurringPlanName: plan?.name ?? 'Plan',
+                    variantId: activeVariantId || null,
+                    variantName: activeVariant ? `${activeVariant.attribute}: ${activeVariant.value}` : null,
+                    unitPrice: productPrice(product, activePlanId, activeVariantId),
+                    quantity
+                  })
+                }
+                type="button"
               >
-                {variants.map((variant) => (
-                  <option key={variant.id} value={variant.id}>
-                    {variant.attribute}: {variant.value}
-                    {Number(variant.extraPrice) > 0 ? ` (+${formatCurrency(variant.extraPrice)})` : ''}
-                  </option>
-                ))}
-              </select>
-            ) : null}
+                <CreditCardIcon className="h-4 w-4" />
+                Add to cart
+              </button>
+            </div>
 
-            <p className="mt-5 text-sm leading-6 text-slate-500">
-              Terms, billing cadence, and subscription actions follow the selected recurring plan.
-              {activeVariant ? ` Selected variant: ${activeVariant.attribute} / ${activeVariant.value}.` : ''}
-            </p>
-            {product.taxRules?.length ? (
-              <p className="mt-3 text-xs leading-6 text-slate-500">
-                Taxes: {product.taxRules.map((rule) => `${rule.name} (${rule.computation === 'fixed' ? formatCurrency(rule.amount ?? rule.ratePercent) : `${rule.amount ?? rule.ratePercent}%`})`).join(', ')}
-              </p>
-            ) : null}
-
-            <button
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              disabled={!hasPlanPricing}
-              onClick={() =>
-                addItem({
-                  productId: product.id,
-                  slug: product.slug,
-                  name: product.name,
-                  imageUrl: images[0] ?? product.imageUrl,
-                  recurringPlanId: activePlanId || null,
-                  recurringPlanName: plan?.name ?? 'Plan',
-                  variantId: activeVariantId || null,
-                  variantName: activeVariant ? `${activeVariant.attribute}: ${activeVariant.value}` : null,
-                  unitPrice: productPrice(product, activePlanId, activeVariantId),
-                  quantity: 1
-                })
-              }
-              type="button"
-            >
-              <CreditCardIcon className="h-4 w-4" />
-              Add to cart
-            </button>
-          </div>
+            <div className="mt-6 grid gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              <div className="flex items-center gap-2 text-slate-950">
+                <CalendarRepeatIcon className="h-4 w-4 text-emerald-700" />
+                {plan ? `Billing cadence: every ${planIntervalLabel(plan)}` : 'Recurring billing enabled'}
+              </div>
+              <p>30 day money-back guarantee for the current billing period.</p>
+              <p>Portal pricing updates instantly when plan or variant changes.</p>
+              {product.taxRules?.length ? (
+                <p>
+                  Taxes: {product.taxRules.map((rule) => `${rule.name} (${rule.computation === 'fixed' ? formatCurrency(rule.amount ?? rule.ratePercent) : `${rule.amount ?? rule.ratePercent}%`})`).join(', ')}
+                </p>
+              ) : null}
+            </div>
+          </section>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -586,12 +629,16 @@ function defaultPlanId(product: Product) {
 }
 
 function productImages(product: Product) {
-  const imageUrls = (product.imageUrls ?? []).filter(
+  const mediaUrls = (product.media ?? [])
+    .filter((entry) => entry.type === 'image')
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((entry) => entry.url);
+  const imageUrls = [...mediaUrls, ...(product.imageUrls ?? [])].filter(
     (url) => url.startsWith('data:image/') || /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)
   );
 
   if (imageUrls.length) {
-    return imageUrls;
+    return [...new Set(imageUrls)];
   }
 
   return product.imageUrl &&
@@ -612,6 +659,120 @@ function productPrice(product: Product, recurringPlanId?: string, variantId?: st
       product.baseSalesPrice ??
       0
   ) + variantExtraPrice;
+}
+
+function productPlanOptions(product: Product, plans: RecurringPlan[]) {
+  const linkedOptions = product.planPricing
+    .map((pricing) => {
+      const recurringPlan = plans.find((entry) => entry.id === pricing.recurringPlanId) ?? pricing.recurringPlan ?? null;
+      const price = Number(pricing.overridePrice ?? product.baseSalesPrice ?? 0);
+      const intervalDays = recurringPlan ? recurringPlanDurationDays(recurringPlan) : Number.MAX_SAFE_INTEGER;
+      const normalizedPrice = recurringPlan ? price / intervalDays : price;
+
+      return {
+        ...pricing,
+        recurringPlan,
+        price,
+        intervalDays,
+        normalizedPrice
+      };
+    })
+    .sort((left, right) => left.intervalDays - right.intervalDays);
+
+  const baseline = linkedOptions[0]?.normalizedPrice ?? 0;
+
+  return linkedOptions.map((option) => ({
+    ...option,
+    perIntervalLabel: option.recurringPlan
+      ? `${formatCurrency(Math.round((option.price / option.recurringPlan.intervalCount) * 100) / 100)} / ${option.recurringPlan.intervalUnit}`
+      : formatCurrency(option.price),
+    savingsPercent:
+      baseline > 0 ? Math.max(0, Math.round((1 - option.normalizedPrice / baseline) * 100)) : 0
+  }));
+}
+
+function recurringPlanDurationDays(plan: Pick<RecurringPlan, 'intervalCount' | 'intervalUnit'>) {
+  const unitDays = plan.intervalUnit === 'day' ? 1 : plan.intervalUnit === 'week' ? 7 : plan.intervalUnit === 'month' ? 30 : 365;
+  return plan.intervalCount * unitDays;
+}
+
+function QuantityStepper({
+  value,
+  onChange
+}: Readonly<{
+  value: number;
+  onChange: (value: number) => void;
+}>) {
+  return (
+    <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50">
+      <button
+        className="h-11 w-11 text-lg font-semibold text-slate-700 transition hover:bg-white"
+        onClick={() => onChange(Math.max(1, value - 1))}
+        type="button"
+      >
+        -
+      </button>
+      <span className="min-w-[44px] text-center text-sm font-semibold text-slate-950">{value}</span>
+      <button
+        className="h-11 w-11 text-lg font-semibold text-slate-700 transition hover:bg-white"
+        onClick={() => onChange(value + 1)}
+        type="button"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+function ProductMediaGallery({
+  images,
+  name
+}: Readonly<{
+  images: string[];
+  name: string;
+}>) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const imageSignature = images.join('::');
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [imageSignature]);
+
+  if (!images.length) {
+    return (
+      <div className="grid h-[520px] place-items-center rounded-[28px] border border-slate-200 bg-slate-100 text-slate-400">
+        <CubeIcon className="h-12 w-12" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[96px_minmax(0,1fr)]">
+      <div className="order-2 flex gap-3 overflow-x-auto lg:order-1 lg:flex-col">
+        {images.map((image, index) => (
+          <button
+            className={`overflow-hidden rounded-[24px] border transition ${
+              index === activeIndex ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'
+            }`}
+            key={`${image}-${index}`}
+            onClick={() => setActiveIndex(index)}
+            type="button"
+          >
+            <img alt={`${name} thumbnail ${index + 1}`} className="h-20 w-20 object-cover" src={image} />
+          </button>
+        ))}
+      </div>
+      <div className="order-1 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 lg:order-2">
+        <img
+          alt={`${name} preview ${activeIndex + 1}`}
+          className="h-[520px] w-full object-cover"
+          decoding="async"
+          loading="lazy"
+          src={images[activeIndex]}
+        />
+      </div>
+    </div>
+  );
 }
 
 function ProductSlideshow({

@@ -294,6 +294,27 @@ export type InvoiceSummary = {
   amountDue: string | number;
 };
 
+export type CheckoutSummaryItem = {
+  productId: string;
+  recurringPlanId: string | null;
+  variantId: string | null;
+  quantity: number;
+  unitPrice: string | number;
+  discountAmount: string | number;
+  taxAmount: string | number;
+  lineTotal: string | number;
+};
+
+export type CheckoutSummary = {
+  items: CheckoutSummaryItem[];
+  subtotalAmount: string | number;
+  discountAmount: string | number;
+  taxAmount: string | number;
+  totalAmount: string | number;
+  appliedDiscountCode: string | null;
+  hasDiscount: boolean;
+};
+
 export type Subscription = {
   id: string;
   subscriptionNumber: string;

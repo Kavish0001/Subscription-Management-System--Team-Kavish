@@ -1,4 +1,4 @@
-import { DiscountScopeType, DiscountType } from '@prisma/client';
+import { DiscountScopeType, DiscountType, TaxComputation } from '@prisma/client';
 
 import { buildSubscriptionPricing } from './pricing.js';
 import type { AppError } from '../../lib/errors.js';
@@ -8,7 +8,7 @@ type PricingProduct = {
   name: string;
   baseSalesPrice: number;
   planPricing: Array<{ recurringPlanId: string; overridePrice: number }>;
-  productTaxRules: Array<{ taxRule: { ratePercent: number } }>;
+  productTaxRules: Array<{ taxRule: { ratePercent: number; computation: TaxComputation } }>;
 };
 
 type PricingVariant = {
@@ -65,7 +65,7 @@ describe('buildSubscriptionPricing', () => {
           name: 'Core ERP',
           baseSalesPrice: 100,
           planPricing: [],
-          productTaxRules: [{ taxRule: { ratePercent: 18 } }]
+          productTaxRules: [{ taxRule: { ratePercent: 18, computation: TaxComputation.percentage } }]
         },
         {
           id: 'product-2',

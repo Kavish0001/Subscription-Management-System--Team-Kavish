@@ -1,5 +1,5 @@
 import { InvoiceStatus, PaymentStatus, Prisma, SubscriptionStatus } from '@prisma/client';
-import { createInvoiceSchema, paginationSchema, portalCheckoutSchema } from '@subscription/shared';
+import { createInvoiceSchema, paginationSchema, portalCheckoutSchema, portalCheckoutSummarySchema } from '@subscription/shared';
 import { Router, type Request } from 'express';
 
 import { AppError } from '../../lib/errors.js';
@@ -28,6 +28,103 @@ function nextInvoiceDateFromPlan(date: Date, unit?: string | null, count = 1) {
   }
 
   return addInterval(date, count, unit as 'day' | 'week' | 'month' | 'year');
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+async function buildPortalCheckoutSummary(
+  db: typeof prisma,
+  payload: {
+    discountCode?: string;
+    lines: Array<{
+      productId: string;
+      recurringPlanId?: string | null;
+      variantId?: string;
+      quantity: number;
+    }>;
+  },
+) {
+  const groupedLines = new Map<string, typeof payload.lines>();
+  for (const line of payload.lines) {
+    const key = line.recurringPlanId ?? 'no-plan';
+    groupedLines.set(key, [...(groupedLines.get(key) ?? []), line]);
+  }
+
+  const items: Array<{
+    productId: string;
+    recurringPlanId: string | null;
+    variantId: string | null;
+    quantity: number;
+    unitPrice: Prisma.Decimal;
+    discountAmount: Prisma.Decimal;
+    taxAmount: Prisma.Decimal;
+    lineTotal: Prisma.Decimal;
+  }> = [];
+
+  let subtotalAmount = 0;
+  let discountAmount = 0;
+  let taxAmount = 0;
+  let totalAmount = 0;
+
+  for (const [planKey, lines] of groupedLines.entries()) {
+    const recurringPlan =
+      planKey === 'no-plan'
+        ? null
+        : await db.recurringPlan.findUnique({
+            where: { id: planKey }
+          });
+
+    if (planKey !== 'no-plan' && !recurringPlan) {
+      throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+    }
+
+    const pricing = await buildSubscriptionPricing(db, {
+      recurringPlanId: recurringPlan?.id ?? null,
+      discountCode: payload.discountCode,
+      lines: lines.map((line) => ({
+        productId: line.productId,
+        variantId: line.variantId,
+        quantity: line.quantity
+      }))
+    });
+
+    subtotalAmount += Number(pricing.subtotalAmount);
+    discountAmount += Number(pricing.discountAmount);
+    taxAmount += Number(pricing.taxAmount);
+    totalAmount += Number(pricing.totalAmount);
+
+    pricing.lines
+      .slice()
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .forEach((line, index) => {
+        items.push({
+          productId: line.productId,
+          recurringPlanId: recurringPlan?.id ?? null,
+          variantId: line.variantId ?? null,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          discountAmount: line.discountAmount,
+          taxAmount: line.taxAmount,
+          lineTotal: line.lineTotal
+        });
+
+        if (!lines[index]) {
+          throw new AppError('Checkout summary line mismatch', 500);
+        }
+      });
+  }
+
+  return {
+    items,
+    subtotalAmount: roundMoney(subtotalAmount),
+    discountAmount: roundMoney(discountAmount),
+    taxAmount: roundMoney(taxAmount),
+    totalAmount: roundMoney(totalAmount),
+    appliedDiscountCode: payload.discountCode?.trim().toUpperCase() || null,
+    hasDiscount: discountAmount > 0
+  };
 }
 
 billingRouter.get('/invoices', async (request, response) => {
@@ -96,6 +193,17 @@ billingRouter.get('/invoices/:id', async (request: Request<InvoiceIdParams>, res
     assertInvoiceAccess(auth, invoice.customerContact.userId);
 
     response.json({ data: invoice });
+  } catch (error) {
+    next(error);
+  }
+});
+
+billingRouter.post('/checkout/summary', requireRole('portal_user'), async (request, response, next) => {
+  try {
+    const payload = portalCheckoutSummarySchema.parse(request.body);
+    const summary = await buildPortalCheckoutSummary(prisma, payload);
+
+    response.json({ data: summary });
   } catch (error) {
     next(error);
   }
