@@ -204,7 +204,7 @@ export function ResourceListPage({
   });
 
   const workflowMutation = useMutation({
-    mutationFn: async (input: { action: 'send-quotation' | 'confirm' | 'invoice' | 'renew' | 'upsell' | 'cancel' | 'close'; subscription: Subscription }) => {
+    mutationFn: async (input: { action: 'send-quotation' | 'confirm' | 'invoice' | 'renew' | 'upsell' | 'cancel' | 'close' | 'reopen'; subscription: Subscription }) => {
       if (input.action === 'invoice') {
         return apiRequest('/invoices', {
           token,
@@ -632,6 +632,9 @@ export function ResourceListPage({
                     ['draft', 'confirmed'].includes(invoice.status)
                   );
                   const latestInvoice = subscription.invoices[0];
+                  const invoiceDue =
+                    Boolean(subscription.nextInvoiceDate) &&
+                    new Date(subscription.nextInvoiceDate as string).getTime() <= Date.now();
 
                   return (
                     <tr className="border-t border-white/10 text-slate-100" key={subscription.id}>
@@ -646,46 +649,51 @@ export function ResourceListPage({
                       <td className="px-4 py-3">{formatDate(subscription.nextInvoiceDate)}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
-                          {subscription.status === 'draft' ? (
+                          {['draft', 'quotation'].includes(subscription.status) ? (
                             <button className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'send-quotation', subscription })} type="button">
                               Send
                             </button>
                           ) : null}
-                          {subscription.status === 'quotation_sent' ? (
+                          {['quotation', 'quotation_sent'].includes(subscription.status) ? (
                             <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => navigate(`/preview/subscriptions/${subscription.id}`)} type="button">
                               Preview
                             </button>
                           ) : null}
-                          {subscription.status === 'quotation_sent' ? (
+                          {['draft', 'quotation', 'quotation_sent'].includes(subscription.status) ? (
                             <button className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'confirm', subscription })} type="button">
                               Confirm
                             </button>
                           ) : null}
-                          {!openInvoice ? (
+                          {!openInvoice && ['confirmed', 'in_progress'].includes(subscription.status) && invoiceDue ? (
                             <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-3 py-1 text-xs font-semibold text-slate-950" onClick={() => workflowMutation.mutate({ action: 'invoice', subscription })} type="button">
                               Create Invoice
                             </button>
-                          ) : (
+                          ) : openInvoice ? (
                             <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
                               {latestInvoice?.status}
                             </span>
-                          )}
-                          {['confirmed', 'active', 'closed'].includes(subscription.status) ? (
+                          ) : null}
+                          {['confirmed', 'in_progress', 'closed'].includes(subscription.status) ? (
                             <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'renew', subscription })} type="button">
                               Renew
                             </button>
                           ) : null}
-                          {['confirmed', 'active', 'closed'].includes(subscription.status) ? (
+                          {['confirmed', 'in_progress', 'closed'].includes(subscription.status) ? (
                             <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'upsell', subscription })} type="button">
                               Upsell
                             </button>
                           ) : null}
-                          {['confirmed', 'active'].includes(subscription.status) ? (
+                          {['confirmed', 'in_progress'].includes(subscription.status) ? (
                             <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'close', subscription })} type="button">
                               Close
                             </button>
                           ) : null}
-                          {['draft', 'quotation_sent', 'confirmed'].includes(subscription.status) ? (
+                          {subscription.status === 'closed' ? (
+                            <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'reopen', subscription })} type="button">
+                              Reopen
+                            </button>
+                          ) : null}
+                          {['draft', 'quotation', 'quotation_sent', 'confirmed', 'in_progress'].includes(subscription.status) ? (
                             <button className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white" onClick={() => workflowMutation.mutate({ action: 'cancel', subscription })} type="button">
                               Cancel
                             </button>
@@ -693,7 +701,7 @@ export function ResourceListPage({
                           <button
                             className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200"
                             onClick={() => {
-                              if (window.confirm(`Delete subscription ${subscription.subscriptionNumber}? This also removes its invoices and payments.`)) {
+                              if (window.confirm(`Delete subscription ${subscription.subscriptionNumber}? Only draft or quotation records without invoices can be deleted.`)) {
                                 deleteSubscriptionMutation.mutate(subscription.id);
                               }
                             }}

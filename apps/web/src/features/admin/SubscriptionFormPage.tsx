@@ -18,7 +18,6 @@ export function SubscriptionFormPage() {
   const [quantity, setQuantity] = useState(1);
   const [paymentTermLabel, setPaymentTermLabel] = useState('Immediate payment');
   const [notes, setNotes] = useState('');
-  const [createInvoiceNow, setCreateInvoiceNow] = useState(true);
   const [showContactForm, setShowContactForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contactForm, setContactForm] = useState({
@@ -112,7 +111,7 @@ export function SubscriptionFormPage() {
         throw new ApiError('Select a product before saving', 400);
       }
 
-      const subscription = await apiRequest<{ id: string }>('/subscriptions', {
+      await apiRequest<{ id: string }>('/subscriptions', {
         token,
         method: 'POST',
         body: JSON.stringify({
@@ -131,18 +130,6 @@ export function SubscriptionFormPage() {
           ]
         })
       });
-
-      if (createInvoiceNow) {
-        await apiRequest('/invoices', {
-          token,
-          method: 'POST',
-          body: JSON.stringify({
-            subscriptionOrderId: subscription.id,
-            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            sourceLabel: 'Backoffice form'
-          })
-        });
-      }
     },
     onSuccess: () => {
       navigate('/admin/subscriptions');
@@ -261,10 +248,7 @@ export function SubscriptionFormPage() {
         </Field>
         <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-5 md:col-span-2">
           <p className="text-sm text-slate-300">Estimated total with tax: {formatCurrency(unitPrice * quantity * 1.18)}</p>
-          <label className="mt-3 flex items-center gap-3 text-sm text-slate-200">
-            <input checked={createInvoiceNow} onChange={(event) => setCreateInvoiceNow(event.target.checked)} type="checkbox" />
-            Create invoice immediately
-          </label>
+          <p className="mt-3 text-sm text-slate-400">Invoices are created after the quotation is confirmed and reaches its billing date.</p>
         </div>
         {showContactForm ? (
           <div className="grid gap-4 rounded-[28px] border border-white/10 bg-slate-950/35 p-5 md:col-span-2 md:grid-cols-2">

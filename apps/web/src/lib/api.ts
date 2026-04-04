@@ -58,6 +58,41 @@ export type ProductPlanPricing = {
   recurringPlanId: string;
   overridePrice: string | number | null;
   isDefaultPlan: boolean;
+  recurringPlan?: RecurringPlan;
+};
+
+export type ProductMedia = {
+  id: string;
+  type: 'image' | 'video';
+  url: string;
+  fileName: string;
+  thumbnailUrl?: string;
+  isPrimary: boolean;
+  sortOrder: number;
+};
+
+export type ProductRecurringPrice = {
+  recurringPlanId?: string;
+  planName: string;
+  price: string | number;
+  billingPeriod: 'day' | 'week' | 'month' | 'year';
+  minimumQuantity: number;
+  startDate: string | null;
+  endDate: string | null;
+  autoCloseEnabled: boolean;
+  isClosable: boolean;
+  isPausable: boolean;
+  isRenewable: boolean;
+  isActive: boolean;
+};
+
+export type ProductVariantDetail = {
+  id?: string;
+  attribute: string;
+  value: string;
+  extraPrice: string | number;
+  sortOrder: number;
+  isActive: boolean;
 };
 
 export type Product = {
@@ -72,12 +107,19 @@ export type Product = {
   imageUrl: string | null;
   imageUrls: string[];
   isSubscriptionEnabled: boolean;
+  isActive?: boolean;
   createdAt?: string;
+  updatedAt?: string;
   category?: {
     id: string;
     name: string;
   } | null;
-  variants?: Array<{
+  media?: ProductMedia[];
+  mediaCount?: number;
+  recurringPlansCount?: number;
+  variantsCount?: number;
+  recurringPrices?: ProductRecurringPrice[];
+  variants?: ProductVariantDetail[] | Array<{
     id: string;
     name: string;
     priceOverride: string | number | null;

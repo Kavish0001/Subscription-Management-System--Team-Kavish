@@ -138,7 +138,10 @@ export function useSession() {
   return context;
 }
 
-export function RequireAuth({ roles }: { readonly roles?: SessionUser['role'][] }) {
+export function RequireAuth({
+  roles,
+  children
+}: Readonly<PropsWithChildren<{ readonly roles?: SessionUser['role'][] }>>) {
   const location = useLocation();
   const session = useSession();
 
@@ -154,7 +157,7 @@ export function RequireAuth({ roles }: { readonly roles?: SessionUser['role'][] 
     return <Navigate replace to={session.user.role === 'portal_user' ? '/' : '/admin'} />;
   }
 
-  return <Outlet />;
+  return children ? <>{children}</> : <Outlet />;
 }
 
 export function RequireGuest() {

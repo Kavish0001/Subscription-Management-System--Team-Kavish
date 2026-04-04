@@ -4,6 +4,15 @@ import { Router } from 'express';
 import { z } from 'zod';
 
 import { buildSubscriptionPricing } from './pricing.js';
+import {
+  defaultQuotationExpiry,
+  isCancellableSubscriptionStatus,
+  isClosableSubscriptionStatus,
+  isDeletableSubscriptionStatus,
+  isEditableSubscriptionStatus,
+  isFollowUpEligibleStatus,
+  syncSubscriptionOperationalStatuses,
+} from './lifecycle.js';
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRole, type AuthContext, type AuthenticatedRequest } from '../../middleware/auth.js';
@@ -77,25 +86,26 @@ const upsellSchema = z.object({
   recurringPlanId: z.string().uuid().optional()
 });
 
-function nextInvoiceDateFromPlan(date: Date, unit?: string | null, count = 1) {
-  const next = new Date(date);
+function hasPlanWindowStarted(startDate: Date | null | undefined, now = new Date()) {
+  return !startDate || startDate <= now;
+}
 
-  switch (unit) {
-    case 'day':
-      next.setDate(next.getDate() + count);
-      break;
-    case 'week':
-      next.setDate(next.getDate() + 7 * count);
-      break;
-    case 'month':
-      next.setMonth(next.getMonth() + count);
-      break;
-    case 'year':
-      next.setFullYear(next.getFullYear() + count);
-      break;
+function hasPlanWindowEnded(endDate: Date | null | undefined, now = new Date()) {
+  return Boolean(endDate && endDate < now);
+}
+
+function assertPlanSelectable(plan: {
+  name: string;
+  isActive: boolean;
+  startDate: Date | null;
+  endDate: Date | null;
+  minimumQuantity: number;
+}) {
+  const now = new Date();
+
+  if (!plan.isActive || !hasPlanWindowStarted(plan.startDate, now) || hasPlanWindowEnded(plan.endDate, now)) {
+    throw new AppError(`Recurring plan ${plan.name} is not currently available`, 409, 'RECURRING_PLAN_UNAVAILABLE');
   }
-
-  return next;
 }
 
 function assertSubscriptionAccess(
@@ -131,8 +141,8 @@ async function createLifecycleSubscription(input: {
     throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
   }
 
-  if (!['confirmed', 'active', 'closed'].includes(existing.status)) {
-    throw new AppError('Only confirmed or active subscriptions can create follow-up orders', 409);
+  if (!isFollowUpEligibleStatus(existing.status)) {
+    throw new AppError('Only confirmed, live, or closed subscriptions can create follow-up orders', 409);
   }
 
   if (input.relationType === 'renewal' && existing.recurringPlan && !existing.recurringPlan.isRenewable) {
@@ -147,6 +157,10 @@ async function createLifecycleSubscription(input: {
 
   if (targetPlanId && !targetPlan) {
     throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+  }
+
+  if (targetPlan) {
+    assertPlanSelectable(targetPlan);
   }
 
   let targetProductId = input.overrideProductId;
@@ -207,27 +221,22 @@ async function createLifecycleSubscription(input: {
   const subtotal = lines.reduce((sum, line) => sum + Number(line.unitPrice) * line.quantity, 0);
   const tax = subtotal * 0.18;
   const total = subtotal + tax;
-  const nextStatus =
-    input.actorRole === 'portal_user' ? SubscriptionStatus.confirmed : SubscriptionStatus.draft;
-
   const child = await prisma.subscriptionOrder.create({
     data: {
       subscriptionNumber: `SUB-${Date.now()}`,
       customerContactId: existing.customerContactId,
       salespersonUserId: input.actorUserId,
+      quotationTemplateId: existing.quotationTemplateId,
       recurringPlanId: targetPlanId,
       parentOrderId: existing.id,
       relationType: input.relationType,
       sourceChannel: input.sourceChannel,
-      status: nextStatus,
+      status: SubscriptionStatus.quotation,
       quotationDate: now,
-      confirmedAt: nextStatus === SubscriptionStatus.confirmed ? now : null,
-      startDate: nextStatus === SubscriptionStatus.confirmed ? now : null,
-      nextInvoiceDate: nextInvoiceDateFromPlan(
-        now,
-        targetPlan?.intervalUnit ?? existing.recurringPlan?.intervalUnit,
-        targetPlan?.intervalCount ?? existing.recurringPlan?.intervalCount ?? 1
-      ),
+      quotationExpiresAt: defaultQuotationExpiry(now),
+      confirmedAt: null,
+      startDate: null,
+      nextInvoiceDate: null,
       paymentTermLabel: existing.paymentTermLabel,
       currencyCode: existing.currencyCode,
       subtotalAmount: new Prisma.Decimal(subtotal),
@@ -256,6 +265,8 @@ async function createLifecycleSubscription(input: {
 }
 
 subscriptionsRouter.get('/', async (request, response) => {
+  await syncSubscriptionOperationalStatuses(prisma);
+
   const auth = (request as AuthenticatedRequest).auth;
   const where =
     auth?.role === 'portal_user'
@@ -295,6 +306,8 @@ subscriptionsRouter.get('/', async (request, response) => {
 
 subscriptionsRouter.get('/:id', async (request, response, next) => {
   try {
+    await syncSubscriptionOperationalStatuses(prisma);
+
     const auth = (request as AuthenticatedRequest).auth;
     const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
 
@@ -341,33 +354,15 @@ subscriptionsRouter.delete('/:id', requireRole('admin', 'internal_user'), async 
       throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
     }
 
+    if (!isDeletableSubscriptionStatus(existing.status)) {
+      throw new AppError('Only draft or quotation subscriptions can be deleted', 409);
+    }
+
+    if (existing.invoices.length) {
+      throw new AppError('Subscriptions with invoices or payments cannot be deleted', 409);
+    }
+
     await prisma.$transaction(async (transaction) => {
-      for (const invoice of existing.invoices) {
-        if (invoice.payments.length) {
-          await transaction.payment.deleteMany({
-            where: {
-              invoiceId: invoice.id,
-            },
-          });
-        }
-
-        if (invoice.lines.length) {
-          await transaction.invoiceLine.deleteMany({
-            where: {
-              invoiceId: invoice.id,
-            },
-          });
-        }
-      }
-
-      if (existing.invoices.length) {
-        await transaction.invoice.deleteMany({
-          where: {
-            subscriptionOrderId: existing.id,
-          },
-        });
-      }
-
       for (const line of existing.lines) {
         if (line.taxes.length) {
           await transaction.subscriptionOrderLineTax.deleteMany({
@@ -442,12 +437,33 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
       }
     }
 
+    if (!payload.recurringPlanId) {
+      throw new AppError('Recurring plan is required', 400, 'RECURRING_PLAN_REQUIRED');
+    }
+
+    if (!payload.paymentTermLabel?.trim()) {
+      throw new AppError('Payment term is required', 400, 'PAYMENT_TERM_REQUIRED');
+    }
+
     const recurringPlan = payload.recurringPlanId
       ? await prisma.recurringPlan.findUnique({ where: { id: payload.recurringPlanId } })
       : null;
     if (payload.recurringPlanId && !recurringPlan) {
       throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
     }
+    if (!recurringPlan) {
+      throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
+    }
+    assertPlanSelectable(recurringPlan);
+
+    if (payload.lines.some((line) => line.quantity < recurringPlan.minimumQuantity)) {
+      throw new AppError(
+        `Subscription quantity must be at least ${recurringPlan.minimumQuantity} for the selected recurring plan`,
+        409,
+        'MINIMUM_QUANTITY_NOT_MET'
+      );
+    }
+
     const productIds = [...new Set(payload.lines.map((line) => line.productId))];
     const products = await prisma.product.findMany({
       where: {
@@ -486,16 +502,12 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
         quotationTemplateId: payload.quotationTemplateId,
         recurringPlanId: payload.recurringPlanId,
         sourceChannel: payload.sourceChannel,
-        status:
-          payload.sourceChannel === 'portal' ? SubscriptionStatus.confirmed : SubscriptionStatus.draft,
+        status: SubscriptionStatus.quotation,
         quotationDate: now,
-        confirmedAt: payload.sourceChannel === 'portal' ? now : null,
-        startDate: now,
-        nextInvoiceDate: nextInvoiceDateFromPlan(
-          now,
-          recurringPlan?.intervalUnit,
-          recurringPlan?.intervalCount ?? 1,
-        ),
+        quotationExpiresAt: defaultQuotationExpiry(now),
+        confirmedAt: null,
+        startDate: null,
+        nextInvoiceDate: null,
         paymentTermLabel: payload.paymentTermLabel,
         subtotalAmount:
           pricing?.subtotalAmount ??
@@ -551,16 +563,37 @@ subscriptionsRouter.post('/', requireRole('admin', 'internal_user', 'portal_user
 subscriptionsRouter.post('/:id/send-quotation', requireRole('admin', 'internal_user'), async (request, response, next) => {
   try {
     const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
-    const existing = await prisma.subscriptionOrder.findUnique({ where: { id } });
+    const existing = await prisma.subscriptionOrder.findUnique({
+      where: { id },
+      include: {
+        lines: true,
+        recurringPlan: true
+      }
+    });
     if (!existing) {
       throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
     }
+
+    if (!isEditableSubscriptionStatus(existing.status)) {
+      throw new AppError('Only editable subscriptions can be sent as quotations', 409);
+    }
+
+    if (!existing.lines.length) {
+      throw new AppError('Add at least one order line before sending the quotation', 409);
+    }
+
+    if (!existing.recurringPlan) {
+      throw new AppError('Recurring plan is required before sending the quotation', 409);
+    }
+
+    assertPlanSelectable(existing.recurringPlan);
 
     const subscription = await prisma.subscriptionOrder.update({
       where: { id },
       data: {
         status: SubscriptionStatus.quotation_sent,
-        quotationDate: new Date()
+        quotationDate: new Date(),
+        quotationExpiresAt: existing.quotationExpiresAt ?? defaultQuotationExpiry()
       }
     });
 
@@ -570,20 +603,64 @@ subscriptionsRouter.post('/:id/send-quotation', requireRole('admin', 'internal_u
   }
 });
 
-subscriptionsRouter.post('/:id/confirm', requireRole('admin', 'internal_user'), async (request, response, next) => {
+subscriptionsRouter.post('/:id/confirm', requireRole('admin', 'internal_user', 'portal_user'), async (request, response, next) => {
   try {
+    const auth = (request as AuthenticatedRequest).auth;
     const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
-    const existing = await prisma.subscriptionOrder.findUnique({ where: { id } });
+    const existing = await prisma.subscriptionOrder.findUnique({
+      where: { id },
+      include: {
+        customerContact: true,
+        recurringPlan: true,
+        lines: true
+      }
+    });
     if (!existing) {
       throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
     }
 
+    assertSubscriptionAccess(auth, existing.customerContact.userId);
+
+    if (!isEditableSubscriptionStatus(existing.status)) {
+      throw new AppError('Only draft or quotation subscriptions can be confirmed', 409);
+    }
+
+    if (existing.quotationExpiresAt && existing.quotationExpiresAt < new Date()) {
+      throw new AppError('Quotation has expired and must be revised before confirmation', 409, 'QUOTATION_EXPIRED');
+    }
+
+    if (!existing.paymentTermLabel?.trim()) {
+      throw new AppError('Payment term is required before confirmation', 409);
+    }
+
+    if (!existing.recurringPlan) {
+      throw new AppError('Recurring plan is required before confirmation', 409);
+    }
+
+    const recurringPlan = existing.recurringPlan;
+    assertPlanSelectable(recurringPlan);
+
+    if (!existing.lines.length) {
+      throw new AppError('Add at least one order line before confirmation', 409);
+    }
+
+    if (existing.lines.some((line) => line.quantity < recurringPlan.minimumQuantity)) {
+      throw new AppError(
+        `Subscription quantity must be at least ${recurringPlan.minimumQuantity} for the selected recurring plan`,
+        409,
+        'MINIMUM_QUANTITY_NOT_MET'
+      );
+    }
+
+    const confirmedAt = new Date();
+    const startDate = existing.startDate ?? confirmedAt;
     const subscription = await prisma.subscriptionOrder.update({
       where: { id },
       data: {
         status: SubscriptionStatus.confirmed,
-        confirmedAt: new Date(),
-        startDate: existing.startDate ?? new Date()
+        confirmedAt,
+        startDate,
+        nextInvoiceDate: startDate
       }
     });
 
@@ -599,6 +676,10 @@ subscriptionsRouter.post('/:id/cancel', requireRole('admin', 'internal_user'), a
     const existing = await prisma.subscriptionOrder.findUnique({ where: { id } });
     if (!existing) {
       throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
+    }
+
+    if (!isCancellableSubscriptionStatus(existing.status)) {
+      throw new AppError('This subscription can no longer be cancelled', 409);
     }
 
     const subscription = await prisma.subscriptionOrder.update({
@@ -635,11 +716,41 @@ subscriptionsRouter.post('/:id/close', requireRole('admin', 'internal_user', 'po
       throw new AppError('This recurring plan does not allow closure', 409);
     }
 
+    if (!isClosableSubscriptionStatus(existing.status)) {
+      throw new AppError('Only confirmed or live subscriptions can be closed', 409);
+    }
+
     const subscription = await prisma.subscriptionOrder.update({
       where: { id },
       data: {
         status: SubscriptionStatus.closed,
         expirationDate: new Date()
+      }
+    });
+
+    response.json({ data: subscription });
+  } catch (error) {
+    next(error);
+  }
+});
+
+subscriptionsRouter.post('/:id/reopen', requireRole('admin', 'internal_user'), async (request, response, next) => {
+  try {
+    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+    const existing = await prisma.subscriptionOrder.findUnique({ where: { id } });
+    if (!existing) {
+      throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
+    }
+
+    if (existing.status !== SubscriptionStatus.closed) {
+      throw new AppError('Only closed subscriptions can be reopened', 409);
+    }
+
+    const subscription = await prisma.subscriptionOrder.update({
+      where: { id },
+      data: {
+        status: SubscriptionStatus.draft,
+        expirationDate: null
       }
     });
 

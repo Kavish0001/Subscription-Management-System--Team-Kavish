@@ -5,12 +5,13 @@ export const discountTypes = ['fixed', 'percentage'] as const;
 export const discountScopeTypes = ['all_products', 'selected_products', 'subscriptions'] as const;
 export const subscriptionStatuses = [
   'draft',
+  'quotation',
   'quotation_sent',
   'confirmed',
-  'active',
-  'paused',
+  'in_progress',
   'closed',
   'cancelled',
+  'churned',
 ] as const;
 export const invoiceStatuses = ['draft', 'confirmed', 'cancelled', 'paid'] as const;
 export const paymentStatuses = ['pending', 'succeeded', 'failed'] as const;

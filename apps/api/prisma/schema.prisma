@@ -44,8 +44,11 @@ enum DiscountScopeType {
 
 enum SubscriptionStatus {
   draft
+  quotation
   quotation_sent
   confirmed
+  in_progress
+  churned
   active
   paused
   closed

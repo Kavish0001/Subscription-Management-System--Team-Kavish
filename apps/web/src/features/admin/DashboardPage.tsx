@@ -32,9 +32,9 @@ export function DashboardPage() {
   return (
     <>
       <MetricCard
-        detail="Moved from confirmed checkout to active status."
+        detail="Confirmed subscriptions whose start date has gone live."
         icon={<FolderStackIcon className="h-6 w-6" />}
-        label="Active subscriptions"
+        label="Live subscriptions"
         value={String(metrics?.activeSubscriptions ?? 0)}
       />
       <MetricCard

@@ -427,7 +427,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
   });
 
   const workflowMutation = useMutation({
-    mutationFn: async (action: 'renew' | 'upsell' | 'close') => {
+    mutationFn: async (action: 'confirm' | 'renew' | 'upsell' | 'close') => {
       if (!id) {
         throw new ApiError('Subscription not found', 404);
       }
@@ -441,7 +441,9 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
     onSuccess: async (result, action) => {
       setError(null);
       setMessage(
-        action === 'close'
+        action === 'confirm'
+          ? 'Quotation confirmed.'
+          : action === 'close'
           ? 'Subscription closed.'
           : action === 'renew'
             ? `Renewal created: ${result.subscriptionNumber}`
@@ -457,7 +459,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
         queryClient.invalidateQueries({ queryKey: ['admin-dashboard-subscriptions'] })
       ]);
 
-      if (action !== 'close') {
+      if (action === 'renew' || action === 'upsell') {
         navigate(`/account/orders/${result.id}`);
       }
     },
@@ -468,9 +470,10 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
   });
 
   const subscription = subscriptionQuery.data;
-  const canRenew = mode === 'detail' && ['confirmed', 'active', 'closed'].includes(subscription?.status ?? '');
-  const canUpsell = mode === 'detail' && ['confirmed', 'active', 'closed'].includes(subscription?.status ?? '');
-  const canClose = mode === 'detail' && ['confirmed', 'active'].includes(subscription?.status ?? '');
+  const canConfirm = mode === 'detail' && ['draft', 'quotation', 'quotation_sent'].includes(subscription?.status ?? '');
+  const canRenew = mode === 'detail' && ['confirmed', 'in_progress', 'closed'].includes(subscription?.status ?? '');
+  const canUpsell = mode === 'detail' && ['confirmed', 'in_progress', 'closed'].includes(subscription?.status ?? '');
+  const canClose = mode === 'detail' && ['confirmed', 'in_progress'].includes(subscription?.status ?? '');
   const shouldPrint = mode === 'detail' && searchParams.get('print') === '1';
   const historyItems = useMemo(
     () =>
@@ -510,6 +513,11 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
       actions={
         mode === 'detail' ? (
           <div className="flex flex-wrap gap-3">
+            {canConfirm ? (
+              <button className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white" onClick={() => workflowMutation.mutate('confirm')} type="button">
+                Confirm
+              </button>
+            ) : null}
             {canRenew ? (
               <button className="rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm font-semibold text-white" onClick={() => workflowMutation.mutate('renew')} type="button">
                 Renew

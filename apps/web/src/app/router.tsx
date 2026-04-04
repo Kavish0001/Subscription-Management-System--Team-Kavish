@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AdminLayout } from '../features/admin/AdminLayout';
 import { DashboardPage } from '../features/admin/DashboardPage';
+import { ProductFormPage, ProductListPage } from '../features/admin/ProductPages';
 import { ReportsPage } from '../features/admin/ReportsPage';
 import { ResourceListPage } from '../features/admin/ResourceListPage';
 import { SubscriptionFormPage } from '../features/admin/SubscriptionFormPage';
@@ -73,7 +74,7 @@ export const router = createBrowserRouter([
             path: 'subscriptions',
             element: (
               <ResourceListPage
-                description="Draft, quotation, confirmed, and active subscriptions."
+                description="Draft, quotation, confirmed, live, and closed subscriptions."
                 resource="subscriptions"
                 title="Subscriptions"
               />
@@ -82,14 +83,11 @@ export const router = createBrowserRouter([
           { path: 'subscriptions/new', element: <SubscriptionFormPage /> },
           {
             path: 'products',
-            element: (
-              <ResourceListPage
-                description="Catalog records, variants, and subscription-enabled products."
-                resource="products"
-                title="Products"
-              />
-            )
+            element: <RequireAuth roles={['admin']}><ProductListPage /></RequireAuth>
           },
+          { path: 'products/new', element: <RequireAuth roles={['admin']}><ProductFormPage mode="create" /></RequireAuth> },
+          { path: 'products/:id', element: <RequireAuth roles={['admin']}><ProductFormPage mode="view" /></RequireAuth> },
+          { path: 'products/:id/edit', element: <RequireAuth roles={['admin']}><ProductFormPage mode="edit" /></RequireAuth> },
           {
             path: 'recurring-plans',
             element: (
@@ -114,8 +112,7 @@ export const router = createBrowserRouter([
           { path: 'reports', element: <ReportsPage /> },
           {
             path: 'users',
-            element: <RequireAuth roles={['admin']} />,
-            children: [{ index: true, element: <UsersPage /> }]
+            element: <RequireAuth roles={['admin']}><UsersPage /></RequireAuth>
           },
           { path: '*', element: <Navigate replace to="/admin" /> }
         ]

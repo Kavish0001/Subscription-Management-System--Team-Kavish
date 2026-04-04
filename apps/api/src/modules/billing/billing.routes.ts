@@ -5,6 +5,7 @@ import { Router, type Request } from 'express';
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middleware/auth.js';
+import { isInvoiceEligibleStatus, syncSubscriptionOperationalStatuses } from '../subscriptions/lifecycle.js';
 import { buildSubscriptionPricing } from '../subscriptions/pricing.js';
 
 export const billingRouter = Router();
@@ -43,6 +44,8 @@ function nextInvoiceDateFromPlan(date: Date, unit?: string | null, count = 1) {
 }
 
 billingRouter.get('/invoices', async (request, response) => {
+  await syncSubscriptionOperationalStatuses(prisma);
+
   const auth = (request as AuthenticatedRequest).auth;
   const where =
     auth?.role === 'portal_user'
@@ -82,6 +85,8 @@ billingRouter.get('/invoices', async (request, response) => {
 
 billingRouter.get('/invoices/:id', async (request: Request<InvoiceIdParams>, response, next) => {
   try {
+    await syncSubscriptionOperationalStatuses(prisma);
+
     const auth = (request as AuthenticatedRequest).auth;
     const invoice = await prisma.invoice.findUnique({
       where: { id: request.params.id },
@@ -172,13 +177,10 @@ billingRouter.post('/checkout/complete', requireRole('portal_user'), async (requ
               sourceChannel: 'portal',
               status: SubscriptionStatus.confirmed,
               quotationDate: now,
+              quotationExpiresAt: now,
               confirmedAt: now,
               startDate: now,
-              nextInvoiceDate: nextInvoiceDateFromPlan(
-                now,
-                recurringPlan?.intervalUnit,
-                recurringPlan?.intervalCount ?? 1,
-              ),
+              nextInvoiceDate: now,
               paymentTermLabel: 'Immediate payment',
               subtotalAmount: pricing.subtotalAmount,
               discountAmount: pricing.discountAmount,
@@ -251,7 +253,14 @@ billingRouter.post('/checkout/complete', requireRole('portal_user'), async (requ
           await tx.subscriptionOrder.update({
             where: { id: subscription.id },
             data: {
-              status: SubscriptionStatus.active
+              status: SubscriptionStatus.in_progress,
+              nextInvoiceDate: recurringPlan
+                ? nextInvoiceDateFromPlan(
+                    now,
+                    recurringPlan.intervalUnit,
+                    recurringPlan.intervalCount ?? 1,
+                  )
+                : null
             }
           });
 
@@ -288,6 +297,8 @@ billingRouter.post('/checkout/complete', requireRole('portal_user'), async (requ
 
 billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_user'), async (request, response, next) => {
   try {
+    await syncSubscriptionOperationalStatuses(prisma);
+
     const auth = (request as AuthenticatedRequest).auth;
     const payload = createInvoiceSchema.parse(request.body);
 
@@ -309,7 +320,7 @@ billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_us
         throw new AppError('You do not have permission to invoice this subscription', 403);
       }
 
-      if (!['confirmed', 'active'].includes(subscription.status)) {
+      if (!isInvoiceEligibleStatus(subscription.status)) {
         throw new AppError('Portal checkout can only invoice confirmed subscriptions', 409);
       }
     }
@@ -328,12 +339,19 @@ billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_us
       return response.json({ data: existingInvoice });
     }
 
-    const invoiceDate =
-      subscription.status === SubscriptionStatus.active &&
-      subscription.nextInvoiceDate &&
-      subscription.nextInvoiceDate <= new Date()
-        ? subscription.nextInvoiceDate
-        : new Date();
+    if (!isInvoiceEligibleStatus(subscription.status)) {
+      throw new AppError('Invoices can only be created for confirmed or live subscriptions', 409);
+    }
+
+    if (!subscription.nextInvoiceDate) {
+      throw new AppError('Next invoice date is not available yet for this subscription', 409);
+    }
+
+    if (subscription.nextInvoiceDate > new Date()) {
+      throw new AppError('Invoice for this billing cycle is not due yet', 409, 'INVOICE_NOT_DUE');
+    }
+
+    const invoiceDate = subscription.nextInvoiceDate;
 
     const invoice = await prisma.invoice.create({
       data: {
@@ -367,16 +385,12 @@ billingRouter.post('/invoices', requireRole('admin', 'internal_user', 'portal_us
       include: { lines: true }
     });
 
-    if (
-      subscription.recurringPlan &&
-      subscription.nextInvoiceDate &&
-      subscription.nextInvoiceDate <= invoiceDate
-    ) {
+    if (subscription.recurringPlan) {
       await prisma.subscriptionOrder.update({
         where: { id: subscription.id },
         data: {
           nextInvoiceDate: nextInvoiceDateFromPlan(
-            subscription.nextInvoiceDate,
+            invoiceDate,
             subscription.recurringPlan.intervalUnit,
             subscription.recurringPlan.intervalCount,
           )
@@ -467,6 +481,8 @@ billingRouter.post('/invoices/:id/restore-draft', requireRole('admin', 'internal
 
 billingRouter.post('/payments/mock', async (request, response, next) => {
   try {
+    await syncSubscriptionOperationalStatuses(prisma);
+
     const auth = (request as AuthenticatedRequest).auth;
     const invoiceId = request.body.invoiceId as string | undefined;
     const paymentMethod = (request.body.paymentMethod as string | undefined) ?? 'mock-card';
@@ -528,7 +544,10 @@ billingRouter.post('/payments/mock', async (request, response, next) => {
         const updatedSubscription = await tx.subscriptionOrder.update({
           where: { id: invoice.subscriptionOrderId },
           data: {
-            status: SubscriptionStatus.active
+            status:
+              invoice.subscriptionOrder.startDate && invoice.subscriptionOrder.startDate <= new Date()
+                ? SubscriptionStatus.in_progress
+                : SubscriptionStatus.confirmed
           }
         });
 

@@ -254,10 +254,17 @@ function defaultPlanId(product: Product) {
 }
 
 function productImages(product: Product) {
-  if (product.imageUrls?.length) {
-    return product.imageUrls;
+  const imageUrls = (product.imageUrls ?? []).filter((url) =>
+    url.startsWith('data:image/') || /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)
+  );
+
+  if (imageUrls.length) {
+    return imageUrls;
   }
-  return product.imageUrl ? [product.imageUrl] : [];
+  return product.imageUrl &&
+    (product.imageUrl.startsWith('data:image/') || /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(product.imageUrl))
+    ? [product.imageUrl]
+    : [];
 }
 
 function productPrice(product: Product, recurringPlanId?: string) {
