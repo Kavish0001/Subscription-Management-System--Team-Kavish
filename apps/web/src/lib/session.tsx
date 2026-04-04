@@ -41,22 +41,36 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   const refreshSession = async () => {
     try {
-      const me = await apiRequest<{ userId: string; email: string; role: SessionUser['role'] }>(
-        '/auth/me'
-      );
-      setUser(normalizeSessionUser(me));
-    } catch (meError) {
-      try {
-        const refreshed = await apiRequest<{ user: SessionUser }>('/auth/refresh', {
-          method: 'POST'
-        });
-        setUser(normalizeSessionUser(refreshed.user));
-      } catch {
-        setUser(null);
+      const me = await apiRequest<{
+        user: { userId: string; email: string; role: SessionUser['role'] } | null;
+        canRefresh: boolean;
+      }>('/auth/me');
 
-        if (meError instanceof ApiError && meError.status >= 500) {
-          throw meError;
-        }
+      if (me.user) {
+        setUser(normalizeSessionUser(me.user));
+        return;
+      }
+
+      if (!me.canRefresh) {
+        setUser(null);
+        return;
+      }
+
+      const refreshed = await apiRequest<{ user: SessionUser | null }>('/auth/refresh', {
+        method: 'POST'
+      });
+
+      if (refreshed.user) {
+        setUser(normalizeSessionUser(refreshed.user));
+        return;
+      }
+
+      setUser(null);
+    } catch (error) {
+      setUser(null);
+
+      if (error instanceof ApiError && error.status >= 500) {
+        throw error;
       }
     } finally {
       setReady(true);

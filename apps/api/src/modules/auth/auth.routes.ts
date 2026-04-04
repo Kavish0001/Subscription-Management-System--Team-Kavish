@@ -1,8 +1,10 @@
 import { Router, type Response } from 'express';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
+import type { UserRole } from '@subscription/shared';
 
 import { confirmPasswordReset, login, logout, refreshSession, requestPasswordReset, signup } from './auth.service.js';
-import { requireAuth, type AuthenticatedRequest } from '../../middleware/auth.js';
+import { AppError } from '../../lib/errors.js';
+import { env } from '../../config/env.js';
 
 const accessCookieName = 'accessToken';
 const refreshCookieName = 'refreshToken';
@@ -40,6 +42,10 @@ function clearSessionCookies(response: Response) {
   response.clearCookie(refreshCookieName, { path: '/' });
 }
 
+function clearAccessCookie(response: Response) {
+  response.clearCookie(accessCookieName, { path: '/' });
+}
+
 authRouter.post('/signup', async (request, response, next) => {
   try {
     const result = await signup(request.body);
@@ -67,7 +73,14 @@ authRouter.post('/refresh', async (request, response, next) => {
     writeSessionCookies(response, result);
     response.json({ data: { user: result.user } });
   } catch (error) {
-    clearSessionCookies(response);
+    if (
+      error instanceof AppError &&
+      (error.code === 'REFRESH_TOKEN_REQUIRED' || error.code === 'INVALID_REFRESH_TOKEN')
+    ) {
+      clearSessionCookies(response);
+      return response.json({ data: { user: null } });
+    }
+
     next(error);
   }
 });
@@ -100,6 +113,45 @@ authRouter.post('/reset-password/confirm', async (request, response, next) => {
   }
 });
 
-authRouter.get('/me', requireAuth, async (request, response) => {
-  response.json({ data: (request as AuthenticatedRequest).auth });
+authRouter.get('/me', async (request, response) => {
+  const refreshToken = request.cookies[refreshCookieName] as string | undefined;
+  const accessToken =
+    request.headers.authorization?.replace(/^Bearer\s+/i, '') ??
+    (request.cookies[accessCookieName] as string | undefined);
+
+  if (!accessToken) {
+    return response.json({
+      data: {
+        user: null,
+        canRefresh: Boolean(refreshToken)
+      }
+    });
+  }
+
+  try {
+    const payload = jwt.verify(accessToken, env.JWT_ACCESS_SECRET) as JwtPayload & {
+      email: string;
+      role: UserRole;
+    };
+
+    return response.json({
+      data: {
+        user: {
+          userId: String(payload.sub),
+          email: payload.email,
+          role: payload.role
+        },
+        canRefresh: Boolean(refreshToken)
+      }
+    });
+  } catch {
+    clearAccessCookie(response);
+
+    return response.json({
+      data: {
+        user: null,
+        canRefresh: Boolean(refreshToken)
+      }
+    });
+  }
 });

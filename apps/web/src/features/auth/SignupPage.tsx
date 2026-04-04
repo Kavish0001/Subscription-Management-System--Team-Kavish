@@ -34,19 +34,24 @@ export function SignupPage() {
     >
       <form
         className="grid gap-4"
-        onSubmit={form.handleSubmit(async (values) => {
-          try {
-            setError(null);
-            if (values.password !== confirmPassword) {
-              setError('Passwords do not match');
-              return;
+        onSubmit={form.handleSubmit(
+          async (values) => {
+            try {
+              setError(null);
+              if (values.password !== confirmPassword) {
+                setError('Passwords do not match');
+                return;
+              }
+              await signup(values);
+              navigate('/');
+            } catch (submissionError) {
+              setError(submissionError instanceof ApiError ? submissionError.message : 'Unable to create account');
             }
-            await signup(values);
-            navigate('/');
-          } catch (submissionError) {
-            setError(submissionError instanceof ApiError ? submissionError.message : 'Unable to create account');
+          },
+          () => {
+            setError('Please fix the highlighted fields and try again.');
           }
-        })}
+        )}
       >
         <div>
           <p className="eyebrow">Create account</p>
@@ -55,18 +60,33 @@ export function SignupPage() {
         <label className="grid gap-2 text-sm">
           <span className="muted">Name</span>
           <input className="app-input" {...form.register('name')} />
+          {form.formState.errors.name ? (
+            <span className="text-sm text-red-300">{form.formState.errors.name.message}</span>
+          ) : null}
         </label>
         <label className="grid gap-2 text-sm">
           <span className="muted">Email ID</span>
           <input className="app-input" {...form.register('email')} type="email" />
+          {form.formState.errors.email ? (
+            <span className="text-sm text-red-300">{form.formState.errors.email.message}</span>
+          ) : null}
         </label>
         <label className="grid gap-2 text-sm">
           <span className="muted">Password</span>
           <input className="app-input" {...form.register('password')} type="password" />
+          <span className="text-xs muted">
+            Use at least 9 characters with uppercase, lowercase, and a special character.
+          </span>
+          {form.formState.errors.password ? (
+            <span className="text-sm text-red-300">{form.formState.errors.password.message}</span>
+          ) : null}
         </label>
         <label className="grid gap-2 text-sm">
           <span className="muted">Re-enter Password</span>
           <input className="app-input" onChange={(event) => setConfirmPassword(event.target.value)} type="password" value={confirmPassword} />
+          {error === 'Passwords do not match' ? (
+            <span className="text-sm text-red-300">Passwords do not match</span>
+          ) : null}
         </label>
         {error ? <MessageBanner tone="error">{error}</MessageBanner> : null}
         <button
