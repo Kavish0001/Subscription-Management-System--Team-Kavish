@@ -16,14 +16,16 @@ type SessionContextValue = {
   user: SessionUser | null;
   isAuthenticated: boolean;
   login: (input: { email: string; password: string }) => Promise<SessionUser>;
-  signup: (input: { name: string; email: string; password: string }) => Promise<SessionUser>;
+  signup: (input: { name: string; email: string; password: string }) => Promise<{ message: string }>;
+  verifyOtp: (input: { email: string; otp: string }) => Promise<SessionUser>;
+  resendOtp: (input: { email: string }) => Promise<{ message: string }>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-export function SessionProvider({ children }: PropsWithChildren) {
+export function SessionProvider({ children }: Readonly<PropsWithChildren>) {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
 
@@ -97,13 +99,25 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return nextUser;
       },
       signup: async (input) => {
-        const result = await apiRequest<{ user: SessionUser }>('/auth/signup', {
+        return apiRequest<{ message: string }>('/auth/signup', {
+          method: 'POST',
+          body: JSON.stringify(input)
+        });
+      },
+      verifyOtp: async (input) => {
+        const result = await apiRequest<{ user: SessionUser }>('/auth/verify-otp', {
           method: 'POST',
           body: JSON.stringify(input)
         });
         const nextUser = normalizeSessionUser(result.user);
         setUser(nextUser);
         return nextUser;
+      },
+      resendOtp: async (input) => {
+        return apiRequest<{ message: string }>('/auth/resend-otp', {
+          method: 'POST',
+          body: JSON.stringify(input)
+        });
       },
       logout: clearSession,
       refreshSession
@@ -124,7 +138,7 @@ export function useSession() {
   return context;
 }
 
-export function RequireAuth({ roles }: { roles?: SessionUser['role'][] }) {
+export function RequireAuth({ roles }: { readonly roles?: SessionUser['role'][] }) {
   const location = useLocation();
   const session = useSession();
 

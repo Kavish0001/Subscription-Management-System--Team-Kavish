@@ -226,7 +226,7 @@ export function ProductPage() {
   );
 }
 
-function AuthRequiredMessage({ title }: { title: string }) {
+function AuthRequiredMessage({ title }: { readonly title: string }) {
   return (
     <Surface title={title}>
       <p className="mb-4 text-slate-300">Login first to access portal shopping and order pages.</p>
@@ -246,7 +246,10 @@ function defaultPlanId(product: Product) {
 }
 
 function productImages(product: Product) {
-  return product.imageUrls?.length ? product.imageUrls : product.imageUrl ? [product.imageUrl] : [];
+  if (product.imageUrls?.length) {
+    return product.imageUrls;
+  }
+  return product.imageUrl ? [product.imageUrl] : [];
 }
 
 function productPrice(product: Product, recurringPlanId?: string) {
@@ -261,11 +264,11 @@ function ProductSlideshow({
   className,
   images,
   name
-}: {
+}: Readonly<{
   className: string;
   images: string[];
   name: string;
-}) {
+}>) {
   const [activeIndex, setActiveIndex] = useState(0);
   const imageSignature = images.join('::');
 
@@ -278,12 +281,12 @@ function ProductSlideshow({
       return;
     }
 
-    const timer = window.setInterval(() => {
+    const timer = globalThis.setInterval(() => {
       setActiveIndex((value) => (value + 1) % images.length);
     }, 3200);
 
     return () => {
-      window.clearInterval(timer);
+      globalThis.clearInterval(timer);
     };
   }, [images.length]);
 

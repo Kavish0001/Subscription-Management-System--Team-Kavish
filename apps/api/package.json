@@ -19,6 +19,7 @@
   "dependencies": {
     "@prisma/client": "^6.6.0",
     "@subscription/shared": "workspace:*",
+    "@types/nodemailer": "^7.0.11",
     "argon2": "^0.41.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -27,6 +28,7 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^8.0.4",
     "pino": "^9.7.0",
     "pino-http": "^10.4.0",
     "zod": "^3.24.3"

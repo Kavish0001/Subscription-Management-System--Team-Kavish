@@ -6,7 +6,7 @@ import { SessionProvider } from '../lib/session';
 
 const queryClient = new QueryClient();
 
-export function AppProviders({ router }: { router: ComponentProps<typeof RouterProvider>['router'] }) {
+export function AppProviders({ router }: { readonly router: ComponentProps<typeof RouterProvider>['router'] }) {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>

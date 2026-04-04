@@ -4,14 +4,17 @@ import {
   requestPasswordResetSchema,
   type SessionUser,
   loginSchema,
-  signupSchema
+  signupSchema,
+  verifyOtpSchema,
+  resendOtpSchema
 } from '@subscription/shared';
 import argon2 from 'argon2';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import jwt, { type JwtPayload, type SignOptions } from 'jsonwebtoken';
 
 import { env } from '../../config/env.js';
 import { AppError } from '../../lib/errors.js';
+import { mailer } from '../../lib/email.js';
 import { prisma } from '../../lib/prisma.js';
 
 function validateJwtTtl(value: string): SignOptions['expiresIn'] {
@@ -129,6 +132,10 @@ async function createPortalUser(input: { email: string; password: string; name: 
   });
 }
 
+function generateOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 export async function signup(input: unknown) {
   const payload = signupSchema.parse(input);
 
@@ -140,14 +147,24 @@ export async function signup(input: unknown) {
     throw new AppError('Email is already registered', 409, 'EMAIL_EXISTS');
   }
 
-  const user = await createPortalUser(payload);
-  const sessionUser: SessionUser = {
-    id: user.id,
-    email: user.email,
-    role: user.role
-  };
+  const otp = generateOtp();
+  const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-  return createSessionTokens(sessionUser);
+  const user = await createPortalUser(payload);
+
+  await (prisma.user as any).update({
+    where: { id: user.id },
+    data: {
+      verificationCode: otp,
+      verificationExpiresAt: otpExpiresAt
+    }
+  });
+
+  await mailer.sendOtp(user.email, otp);
+
+  return {
+    message: 'Verification code sent to your email.'
+  };
 }
 
 export async function login(input: unknown) {
@@ -163,6 +180,10 @@ export async function login(input: unknown) {
 
   if (!user.isActive) {
     throw new AppError('Account is inactive', 403, 'ACCOUNT_INACTIVE');
+  }
+
+  if (!(user as any).emailVerifiedAt) {
+    throw new AppError('Email is not verified', 403, 'EMAIL_NOT_VERIFIED');
   }
 
   const passwordMatches = await argon2.verify(user.passwordHash, payload.password);
@@ -268,6 +289,7 @@ export async function requestPasswordReset(input: unknown) {
     }
   });
 
+
   await prisma.auditLog.create({
     data: {
       entityType: 'user',
@@ -279,9 +301,83 @@ export async function requestPasswordReset(input: unknown) {
     }
   }).catch(() => undefined);
 
+  // Send the actual email with professional template
+  await mailer.sendPasswordReset(user.email, resetLink);
+
   return {
-    message: 'The password reset link has been sent to your email.',
-    resetLink
+    message: 'The password reset link has been sent to your email.'
+  };
+}
+
+export async function verifyOtp(input: unknown) {
+  const payload = verifyOtpSchema.parse(input);
+  const email = payload.email.toLowerCase();
+
+  const user = await prisma.user.findUnique({
+    where: { email }
+  });
+
+  if (!user) {
+    throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+  }
+
+  if ((user as any).emailVerifiedAt) {
+    return { message: 'Email already verified' };
+  }
+
+  if ((user as any).verificationCode !== payload.otp || !(user as any).verificationExpiresAt || (user as any).verificationExpiresAt < new Date()) {
+    throw new AppError('Invalid or expired verification code', 400, 'INVALID_CODE');
+  }
+
+  await (prisma.user as any).update({
+    where: { id: user.id },
+    data: {
+      emailVerifiedAt: new Date(),
+      verificationCode: null,
+      verificationExpiresAt: null
+    }
+  });
+
+  const sessionUser: SessionUser = {
+    id: user.id,
+    email: user.email,
+    role: user.role
+  };
+
+  return createSessionTokens(sessionUser);
+}
+
+export async function resendOtp(input: unknown) {
+  const payload = resendOtpSchema.parse(input);
+  const email = payload.email.toLowerCase();
+
+  const user = await prisma.user.findUnique({
+    where: { email }
+  });
+
+  if (!user) {
+    throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+  }
+
+  if ((user as any).emailVerifiedAt) {
+    throw new AppError('Email already verified', 400, 'ALREADY_VERIFIED');
+  }
+
+  const otp = generateOtp();
+  const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await (prisma.user as any).update({
+    where: { id: user.id },
+    data: {
+      verificationCode: otp,
+      verificationExpiresAt: otpExpiresAt
+    }
+  });
+
+  await mailer.sendOtp(user.email, otp);
+
+  return {
+    message: 'New verification code sent to your email.'
   };
 }
 

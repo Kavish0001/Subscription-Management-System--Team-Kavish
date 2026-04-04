@@ -43,7 +43,7 @@ export function SignupPage() {
                 return;
               }
               await signup(values);
-              navigate('/');
+              navigate(`/verify-otp?email=${encodeURIComponent(values.email)}`);
             } catch (submissionError) {
               setError(submissionError instanceof ApiError ? submissionError.message : 'Unable to create account');
             }

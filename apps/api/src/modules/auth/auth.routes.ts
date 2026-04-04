@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import type { UserRole } from '@subscription/shared';
 
-import { confirmPasswordReset, login, logout, refreshSession, requestPasswordReset, signup } from './auth.service.js';
+import { confirmPasswordReset, login, logout, refreshSession, requestPasswordReset, signup, verifyOtp, resendOtp } from './auth.service.js';
 import { AppError } from '../../lib/errors.js';
 import { env } from '../../config/env.js';
 
@@ -49,8 +49,26 @@ function clearAccessCookie(response: Response) {
 authRouter.post('/signup', async (request, response, next) => {
   try {
     const result = await signup(request.body);
+    response.status(201).json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/verify-otp', async (request, response, next) => {
+  try {
+    const result = (await verifyOtp(request.body)) as any;
     writeSessionCookies(response, result);
-    response.status(201).json({ data: { user: result.user } });
+    response.json({ data: { user: result.user } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/resend-otp', async (request, response, next) => {
+  try {
+    const result = await resendOtp(request.body);
+    response.json({ data: result });
   } catch (error) {
     next(error);
   }
@@ -58,7 +76,7 @@ authRouter.post('/signup', async (request, response, next) => {
 
 authRouter.post('/login', async (request, response, next) => {
   try {
-    const result = await login(request.body);
+    const result = (await login(request.body)) as any;
     writeSessionCookies(response, result);
     response.json({ data: { user: result.user } });
   } catch (error) {
@@ -69,7 +87,7 @@ authRouter.post('/login', async (request, response, next) => {
 authRouter.post('/refresh', async (request, response, next) => {
   try {
     const refreshToken = request.cookies[refreshCookieName] as string | undefined;
-    const result = await refreshSession(refreshToken ?? '');
+    const result = (await refreshSession(refreshToken ?? '')) as any;
     writeSessionCookies(response, result);
     response.json({ data: { user: result.user } });
   } catch (error) {

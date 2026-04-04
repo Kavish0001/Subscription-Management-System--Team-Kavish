@@ -42,6 +42,15 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const verifyOtpSchema = z.object({
+  email: z.string().email(),
+  otp: z.string().length(6).regex(/^\d+$/, 'OTP must be digits only'),
+});
+
+export const resendOtpSchema = z.object({
+  email: z.string().email(),
+});
+
 export const requestPasswordResetSchema = z.object({
   email: z.string().email(),
 });

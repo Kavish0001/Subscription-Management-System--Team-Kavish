@@ -10,6 +10,7 @@ import { UsersPage } from '../features/admin/UsersPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { SignupPage } from '../features/auth/SignupPage';
+import { VerifyOtpPage } from '../features/auth/VerifyOtpPage';
 import { PortalLayout } from '../features/portal/PortalLayout';
 import {
   CartPage,
@@ -56,6 +57,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/login', element: <LoginPage /> },
       { path: '/signup', element: <SignupPage /> },
+      { path: '/verify-otp', element: <VerifyOtpPage /> },
       { path: '/reset-password', element: <ResetPasswordPage /> }
     ]
   },
