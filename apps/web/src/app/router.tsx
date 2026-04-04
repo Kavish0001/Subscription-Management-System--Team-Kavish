@@ -1,13 +1,14 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AdminLayout } from '../features/admin/AdminLayout';
+import { ContactDetailPage, ContactListPage } from '../features/admin/ContactPages';
 import { DashboardPage } from '../features/admin/DashboardPage';
 import { ProductFormPage, ProductListPage } from '../features/admin/ProductPages';
 import { ReportsPage } from '../features/admin/ReportsPage';
 import { ResourceListPage } from '../features/admin/ResourceListPage';
 import { SubscriptionFormPage } from '../features/admin/SubscriptionFormPage';
 import { TaxListPage } from '../features/admin/TaxListPage';
-import { UsersPage } from '../features/admin/UsersPage';
+import { UserDetailPage, UsersPage } from '../features/admin/UsersPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { SignupPage } from '../features/auth/SignupPage';
@@ -114,6 +115,9 @@ export const router = createBrowserRouter([
             path: 'users',
             element: <RequireAuth roles={['admin']}><UsersPage /></RequireAuth>
           },
+          { path: 'users/:id', element: <RequireAuth roles={['admin']}><UserDetailPage /></RequireAuth> },
+          { path: 'contacts', element: <RequireAuth roles={['admin']}><ContactListPage /></RequireAuth> },
+          { path: 'contacts/:id', element: <RequireAuth roles={['admin']}><ContactDetailPage /></RequireAuth> },
           { path: '*', element: <Navigate replace to="/admin" /> }
         ]
       }

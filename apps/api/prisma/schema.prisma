@@ -82,6 +82,10 @@ model User {
   id                     String              @id @default(uuid()) @db.Uuid
   email                  String              @unique
   passwordHash           String              @map("password_hash")
+  name                   String?
+  phone                  String?
+  address                String?
+  defaultContactId       String?             @unique @db.Uuid @map("default_contact_id")
   role                   UserRole
   isActive               Boolean             @default(true) @map("is_active")
   lastLoginAt            DateTime?           @map("last_login_at")
@@ -92,7 +96,9 @@ model User {
   resetPasswordExpiresAt DateTime?           @map("reset_password_expires_at")
   createdAt              DateTime            @default(now()) @map("created_at")
   updatedAt              DateTime            @updatedAt @map("updated_at")
-  contacts               Contact[]
+  contacts               Contact[]           @relation("UserContacts")
+  defaultContact         Contact?            @relation("UserDefaultContact", fields: [defaultContactId], references: [id], onDelete: SetNull)
+  createdContacts        Contact[]           @relation("ContactCreatedBy")
   refreshTokens          RefreshToken[]
   managedSubscriptions   SubscriptionOrder[] @relation("SalespersonSubscriptions")
   createdDiscountRules   DiscountRule[]
@@ -100,26 +106,33 @@ model User {
   auditLogs              AuditLog[]
 
   @@index([role, isActive])
+  @@index([defaultContactId])
   @@map("users")
 }
 
 model Contact {
   id            String              @id @default(uuid()) @db.Uuid
   userId        String?             @db.Uuid @map("user_id")
+  email         String?
   name          String
   phone         String?
+  address       String?
   companyName   String?             @map("company_name")
   notes         String?
+  createdById   String?             @db.Uuid @map("created_by")
   isDefault     Boolean             @default(false) @map("is_default")
   isActive      Boolean             @default(true) @map("is_active")
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
-  user          User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user          User?               @relation("UserContacts", fields: [userId], references: [id], onDelete: SetNull)
+  createdBy     User?               @relation("ContactCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  defaultForUsers User[]            @relation("UserDefaultContact")
   addresses     Address[]
   subscriptions SubscriptionOrder[]
   invoices      Invoice[]
 
   @@index([userId])
+  @@index([createdById])
   @@map("contacts")
 }
 
@@ -264,6 +277,19 @@ model RecurringPlan {
   @@index([isActive])
   @@index([intervalUnit, intervalCount])
   @@map("recurring_plans")
+}
+
+model PaymentTerm {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  dueDays     Int      @default(0) @map("due_days")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@map("payment_terms")
 }
 
 model ProductPlanPricing {

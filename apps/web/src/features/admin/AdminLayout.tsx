@@ -30,7 +30,10 @@ export function AdminLayout() {
     { label: 'Discounts', to: '/admin/discounts', icon: TagPercentIcon, detail: 'Promo rules' },
     { label: 'Reports', to: '/admin/reports', icon: BarChartIcon, detail: 'Revenue visibility' },
     ...(user?.role === 'admin'
-      ? [{ label: 'Users', to: '/admin/users', icon: UsersIcon, detail: 'Staff access control' }]
+      ? [
+          { label: 'Users', to: '/admin/users', icon: UsersIcon, detail: 'Staff access control' },
+          { label: 'Contacts', to: '/admin/contacts', icon: UsersIcon, detail: 'Customer contact records' }
+        ]
       : [])
   ];
 
@@ -61,6 +64,7 @@ export function AdminLayout() {
               <option value="/admin/discounts">Discounts</option>
               <option value="/admin/reports">Reports</option>
               {user?.role === 'admin' ? <option value="/admin/users">Users</option> : null}
+              {user?.role === 'admin' ? <option value="/admin/contacts">Contacts</option> : null}
             </select>
           </div>
           <div className="flex flex-wrap items-center gap-2">

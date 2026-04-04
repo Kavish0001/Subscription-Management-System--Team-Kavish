@@ -12,8 +12,20 @@ export type AdminUser = {
   role: SessionUser['role'];
   isActive: boolean;
   name: string | null;
+  phone?: string | null;
+  address?: string | null;
+  updatedAt?: string;
   createdAt?: string;
   lastLoginAt?: string | null;
+  defaultContactId?: string | null;
+  defaultContact?: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+    activeSubscriptions: number;
+  } | null;
 };
 
 export type Address = {
@@ -32,13 +44,60 @@ export type Contact = {
   id: string;
   userId: string | null;
   name: string;
+  email?: string | null;
   phone: string | null;
+  address?: string | null;
   companyName: string | null;
   notes: string | null;
   isDefault: boolean;
   isActive: boolean;
   createdAt?: string;
+  updatedAt?: string;
+  activeSubscriptions?: number;
+  user?: {
+    id: string;
+    email: string;
+    name: string | null;
+    defaultContactId: string | null;
+  } | null;
   addresses: Address[];
+};
+
+export type ProductAttributeConfig = {
+  id: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  valuesCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PaymentTermConfig = {
+  id: string;
+  name: string;
+  description: string | null;
+  dueDays: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QuotationTemplateConfig = {
+  id: string;
+  name: string;
+  validityDays: number;
+  paymentTermLabel: string;
+  description: string | null;
+  isActive: boolean;
+  recurringPlan: {
+    id: string;
+    name: string;
+  } | null;
+  linesCount: number;
+  subscriptionsCount: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type RecurringPlan = {

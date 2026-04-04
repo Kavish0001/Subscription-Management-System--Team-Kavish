@@ -22,6 +22,7 @@ export function SubscriptionFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [contactForm, setContactForm] = useState({
     name: '',
+    email: '',
     phone: '',
     companyName: '',
     line1: '',
@@ -146,6 +147,7 @@ export function SubscriptionFormPage() {
         method: 'POST',
         body: JSON.stringify({
           name: contactForm.name,
+          email: contactForm.email,
           phone: contactForm.phone || undefined,
           companyName: contactForm.companyName || undefined,
           isDefault: false,
@@ -257,6 +259,9 @@ export function SubscriptionFormPage() {
             </Field>
             <Field label="Phone">
               <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, phone: event.target.value }))} value={contactForm.phone} />
+            </Field>
+            <Field label="Email">
+              <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, email: event.target.value }))} value={contactForm.email} />
             </Field>
             <Field label="Company">
               <input className={fieldClass} onChange={(event) => setContactForm((value) => ({ ...value, companyName: event.target.value }))} value={contactForm.companyName} />

@@ -269,6 +269,8 @@ export const createInternalUserSchema = z.object({
   email: z.string().email(),
   password: signupSchema.shape.password,
   name: z.string().min(2).max(100),
+  phone: z.string().max(32).optional(),
+  address: z.string().max(500).optional(),
   role: z.enum(userRoles).refine((value) => value !== 'portal_user', {
     message: 'Use signup for portal users',
   }),

@@ -95,40 +95,56 @@ async function createSessionTokens(user: SessionUser) {
 async function createPortalUser(input: { email: string; password: string; name: string }) {
   const passwordHash = await argon2.hash(input.password);
 
-  return prisma.user.create({
-    data: {
-      email: input.email.toLowerCase(),
-      passwordHash,
-      role: UserRole.portal_user,
-      contacts: {
-        create: {
-          name: input.name,
-          isDefault: true,
-          addresses: {
-            create: [
-              {
-                type: 'billing',
-                line1: 'Default Billing Address',
-                city: 'Unknown',
-                state: 'Unknown',
-                postalCode: '000000',
-                country: 'India',
-                isDefault: true
-              },
-              {
-                type: 'shipping',
-                line1: 'Default Shipping Address',
-                city: 'Unknown',
-                state: 'Unknown',
-                postalCode: '000000',
-                country: 'India',
-                isDefault: true
-              }
-            ]
-          }
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: input.email.toLowerCase(),
+        passwordHash,
+        role: UserRole.portal_user,
+        name: input.name,
+      }
+    });
+
+    const contact = await tx.contact.create({
+      data: {
+        userId: user.id,
+        createdById: user.id,
+        name: input.name,
+        email: user.email,
+        isDefault: true,
+        addresses: {
+          create: [
+            {
+              type: 'billing',
+              line1: 'Default Billing Address',
+              city: 'Unknown',
+              state: 'Unknown',
+              postalCode: '000000',
+              country: 'India',
+              isDefault: true
+            },
+            {
+              type: 'shipping',
+              line1: 'Default Shipping Address',
+              city: 'Unknown',
+              state: 'Unknown',
+              postalCode: '000000',
+              country: 'India',
+              isDefault: true
+            }
+          ]
         }
       }
-    }
+    });
+
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        defaultContactId: contact.id
+      }
+    });
+
+    return user;
   });
 }
 

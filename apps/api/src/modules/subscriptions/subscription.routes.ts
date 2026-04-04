@@ -81,6 +81,11 @@ const subscriptionInclude = {
   }
 } as const;
 
+const subscriptionListQuerySchema = paginationSchema.extend({
+  contactId: z.string().uuid().optional(),
+  status: z.string().optional()
+});
+
 const upsellSchema = z.object({
   productId: z.string().uuid().optional(),
   recurringPlanId: z.string().uuid().optional()
@@ -268,19 +273,30 @@ subscriptionsRouter.get('/', async (request, response) => {
   await syncSubscriptionOperationalStatuses(prisma);
 
   const auth = (request as AuthenticatedRequest).auth;
-  const where =
-    auth?.role === 'portal_user'
+  const listQuery = subscriptionListQuerySchema.parse(request.query);
+  const statusFilter =
+    listQuery.status === 'active'
+      ? SubscriptionStatus.in_progress
+      : listQuery.status && Object.values(SubscriptionStatus).includes(listQuery.status as SubscriptionStatus)
+        ? (listQuery.status as SubscriptionStatus)
+        : undefined;
+
+  const where = {
+    ...(auth?.role === 'portal_user'
       ? {
           customerContact: {
             userId: auth.userId
           }
         }
-      : undefined;
+      : {}),
+    ...(listQuery.contactId ? { customerContactId: listQuery.contactId } : {}),
+    ...(statusFilter ? { status: statusFilter } : {})
+  };
 
   const shouldPaginate = request.query.page !== undefined || request.query.pageSize !== undefined;
 
   if (shouldPaginate) {
-    const { page, pageSize } = paginationSchema.parse(request.query);
+    const { page, pageSize } = listQuery;
     const [items, total] = await Promise.all([
       prisma.subscriptionOrder.findMany({
         where,

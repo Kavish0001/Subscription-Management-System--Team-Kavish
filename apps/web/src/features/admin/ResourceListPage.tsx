@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Surface } from '../../components/layout';
 import { apiRequest, formatCurrency, formatDate, type Discount, type PaginatedResponse, type Product, type RecurringPlan, type Subscription } from '../../lib/api';
@@ -20,6 +20,9 @@ export function ResourceListPage({
   resource: ResourceKind;
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const subscriptionContactId = searchParams.get('contactId');
+  const subscriptionStatus = searchParams.get('status');
   const queryClient = useQueryClient();
   const { token } = useSession();
   const [page, setPage] = useState(1);
@@ -73,9 +76,12 @@ export function ResourceListPage({
   });
 
   const subscriptionsQuery = useQuery({
-    queryKey: ['admin-subscriptions', page],
+    queryKey: ['admin-subscriptions', page, subscriptionContactId, subscriptionStatus],
     queryFn: () =>
-      apiRequest<PaginatedResponse<Subscription>>(`/subscriptions?page=${page}&pageSize=${ADMIN_LIST_PAGE_SIZE}`, { token }),
+      apiRequest<PaginatedResponse<Subscription>>(
+        `/subscriptions?page=${page}&pageSize=${ADMIN_LIST_PAGE_SIZE}${subscriptionContactId ? `&contactId=${encodeURIComponent(subscriptionContactId)}` : ''}${subscriptionStatus ? `&status=${encodeURIComponent(subscriptionStatus)}` : ''}`,
+        { token }
+      ),
     enabled: resource === 'subscriptions'
   });
 

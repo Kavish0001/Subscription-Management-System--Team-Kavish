@@ -1,8 +1,8 @@
 import { createInternalUserSchema } from '@subscription/shared';
 import argon2 from 'argon2';
 import { Router } from 'express';
+import { Prisma, SubscriptionStatus } from '@prisma/client';
 import { z } from 'zod';
-
 
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
@@ -12,39 +12,123 @@ export const usersRouter = Router();
 
 usersRouter.use(requireAuth);
 
+const userUpdateSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().max(32).nullable().optional(),
+  address: z.string().max(500).nullable().optional(),
+  role: z.enum(['internal_user', 'portal_user']).optional(),
+  isActive: z.boolean().optional()
+}).refine((input) => Object.keys(input).length > 0, {
+  message: 'At least one user field must be updated'
+});
+
+const addressOrderBy: Prisma.AddressOrderByWithRelationInput[] = [{ isDefault: 'desc' }, { createdAt: 'asc' }];
+const activeSubscriptionStatuses: SubscriptionStatus[] = [SubscriptionStatus.in_progress, SubscriptionStatus.active];
+
+const userInclude = {
+  defaultContact: {
+    include: {
+      addresses: {
+        orderBy: addressOrderBy
+      },
+      _count: {
+        select: {
+          subscriptions: {
+            where: {
+              status: {
+                in: activeSubscriptionStatuses
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
+function mapUser(user: any) {
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    lastLoginAt: user.lastLoginAt,
+    name: user.name,
+    phone: user.phone,
+    address: user.address,
+    defaultContactId: user.defaultContactId,
+    defaultContact: user.defaultContact
+      ? {
+          id: user.defaultContact.id,
+          name: user.defaultContact.name,
+          email: user.defaultContact.email,
+          phone: user.defaultContact.phone,
+          address: user.defaultContact.address,
+          createdAt: user.defaultContact.createdAt,
+          updatedAt: user.defaultContact.updatedAt,
+          addresses: user.defaultContact.addresses,
+          activeSubscriptions: user.defaultContact._count?.subscriptions ?? 0
+        }
+      : null
+  };
+}
+
+async function syncDefaultContact(client: Prisma.TransactionClient | typeof prisma, userId: string, data: {
+  name?: string;
+  email?: string;
+  phone?: string | null;
+  address?: string | null;
+}) {
+  const user = await client.user.findUnique({
+    where: { id: userId },
+    select: {
+      defaultContactId: true
+    }
+  });
+
+  if (!user?.defaultContactId) {
+    throw new AppError('User must have a default contact', 409, 'DEFAULT_CONTACT_MISSING');
+  }
+
+  await client.contact.update({
+    where: { id: user.defaultContactId },
+    data: {
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      address: data.address
+    }
+  });
+}
+
 usersRouter.get('/', requireRole('admin'), async (_request, response) => {
   const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      email: true,
-      role: true,
-      isActive: true,
-      createdAt: true,
-      lastLoginAt: true,
-      contacts: {
-        where: {
-          isDefault: true
-        },
-        select: {
-          name: true
-        },
-        take: 1
-      }
-    },
+    include: userInclude,
     orderBy: { createdAt: 'desc' }
   });
 
-  response.json({
-    data: users.map((user) => ({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      isActive: user.isActive,
-      createdAt: user.createdAt,
-      lastLoginAt: user.lastLoginAt,
-      name: user.contacts[0]?.name ?? null
-    }))
-  });
+  response.json({ data: users.map(mapUser) });
+});
+
+usersRouter.get('/:id', requireRole('admin'), async (request, response, next) => {
+  try {
+    const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: userInclude
+    });
+
+    if (!user) {
+      throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+    }
+
+    response.json({ data: mapUser(user) });
+  } catch (error) {
+    next(error);
+  }
 });
 
 usersRouter.post('/', requireRole('admin'), async (request, response, next) => {
@@ -60,64 +144,54 @@ usersRouter.post('/', requireRole('admin'), async (request, response, next) => {
     }
 
     const passwordHash = await argon2.hash(payload.password);
-    const user = await prisma.user.create({
-      data: {
-        email: payload.email.toLowerCase(),
-        passwordHash,
-        role: payload.role,
-        contacts: {
-          create: {
-            name: payload.name,
-            isDefault: true
-          }
+    const created = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: payload.email.toLowerCase(),
+          passwordHash,
+          role: payload.role,
+          name: payload.name,
+          phone: payload.phone,
+          address: payload.address
         }
-      }
+      });
+
+      const contact = await tx.contact.create({
+        data: {
+          userId: user.id,
+          createdById: (request as AuthenticatedRequest).auth?.userId,
+          name: payload.name,
+          email: user.email,
+          phone: payload.phone,
+          address: payload.address,
+          isDefault: true
+        }
+      });
+
+      return tx.user.update({
+        where: { id: user.id },
+        data: {
+          defaultContactId: contact.id
+        },
+        include: userInclude
+      });
     });
 
-    response.status(201).json({
-      data: {
-        id: user.id,
-        email: user.email,
-        role: user.role
-      }
-    });
+    response.status(201).json({ data: mapUser(created) });
   } catch (error) {
     next(error);
   }
 });
 
-const updateUserSchema = z
-  .object({
-    role: z.enum(['internal_user', 'portal_user']).optional(),
-    isActive: z.boolean().optional()
-  })
-  .refine((input) => input.role !== undefined || input.isActive !== undefined, {
-    message: 'At least one user field must be updated'
-  });
-
 usersRouter.patch('/:id', requireRole('admin'), async (request, response, next) => {
   try {
     const auth = (request as AuthenticatedRequest).auth;
     const id = String(Array.isArray(request.params.id) ? request.params.id[0] : request.params.id);
-    const payload = updateUserSchema.parse(request.body);
+    const payload = userUpdateSchema.parse(request.body);
 
     const existing = await prisma.user.findUnique({
       where: { id },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        isActive: true,
-        contacts: {
-          where: {
-            isDefault: true
-          },
-          select: {
-            name: true
-          },
-          take: 1
-        }
-      }
+      include: userInclude
     });
 
     if (!existing) {
@@ -132,32 +206,44 @@ usersRouter.patch('/:id', requireRole('admin'), async (request, response, next) 
       throw new AppError('You cannot disable your own account', 400, 'SELF_DISABLE_BLOCKED');
     }
 
-    const updated = await prisma.user.update({
-      where: { id: existing.id },
-      data: {
-        role: payload.role,
-        isActive: payload.isActive
-      },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        lastLoginAt: true,
-        contacts: {
-          where: {
-            isDefault: true
-          },
-          select: {
-            name: true
-          },
-          take: 1
-        }
+    if (payload.email && payload.email.toLowerCase() !== existing.email) {
+      const emailExists = await prisma.user.findUnique({
+        where: { email: payload.email.toLowerCase() }
+      });
+
+      if (emailExists) {
+        throw new AppError('Email is already registered', 409, 'EMAIL_EXISTS');
       }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: existing.id },
+        data: {
+          email: payload.email?.toLowerCase(),
+          role: payload.role,
+          isActive: payload.isActive,
+          name: payload.name,
+          phone: payload.phone,
+          address: payload.address
+        },
+        include: userInclude
+      });
+
+      await syncDefaultContact(tx as typeof prisma, user.id, {
+        name: payload.name,
+        email: payload.email?.toLowerCase(),
+        phone: payload.phone,
+        address: payload.address
+      });
+
+      return tx.user.findUniqueOrThrow({
+        where: { id: user.id },
+        include: userInclude
+      });
     });
 
-    if (payload.role !== undefined || payload.isActive !== undefined) {
+    if (payload.role !== undefined || payload.isActive !== undefined || payload.email !== undefined) {
       await prisma.refreshToken.updateMany({
         where: {
           userId: existing.id,
@@ -169,17 +255,7 @@ usersRouter.patch('/:id', requireRole('admin'), async (request, response, next) 
       });
     }
 
-    response.json({
-      data: {
-        id: updated.id,
-        email: updated.email,
-        role: updated.role,
-        isActive: updated.isActive,
-        createdAt: updated.createdAt,
-        lastLoginAt: updated.lastLoginAt,
-        name: updated.contacts[0]?.name ?? null
-      }
-    });
+    response.json({ data: mapUser(updated) });
   } catch (error) {
     next(error);
   }
