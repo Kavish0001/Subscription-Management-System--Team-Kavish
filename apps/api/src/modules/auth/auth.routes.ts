@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { login, signup } from './auth.service.js';
+import { login, requestPasswordReset, signup } from './auth.service.js';
 import { requireAuth, type AuthenticatedRequest } from '../../middleware/auth.js';
 
 const refreshCookieName = 'refreshToken';
@@ -38,6 +38,15 @@ authRouter.post('/login', async (request, response, next) => {
 authRouter.post('/logout', (_request, response) => {
   response.clearCookie(refreshCookieName);
   response.status(204).send();
+});
+
+authRouter.post('/reset-password', async (request, response, next) => {
+  try {
+    const result = await requestPasswordReset(request.body?.email);
+    response.json({ data: result });
+  } catch (error) {
+    next(error);
+  }
 });
 
 authRouter.get('/me', requireAuth, async (request, response) => {

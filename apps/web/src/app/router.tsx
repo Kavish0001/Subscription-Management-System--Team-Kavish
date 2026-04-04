@@ -1,12 +1,15 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AdminLayout } from '../features/admin/AdminLayout';
 import { DashboardPage } from '../features/admin/DashboardPage';
+import { ReportsPage } from '../features/admin/ReportsPage';
 import { ResourceListPage } from '../features/admin/ResourceListPage';
 import { SubscriptionFormPage } from '../features/admin/SubscriptionFormPage';
+import { TaxListPage } from '../features/admin/TaxListPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { SignupPage } from '../features/auth/SignupPage';
+import { RequireAuth, RequireGuest } from '../lib/session';
 import { PortalLayout } from '../features/portal/PortalLayout';
 import {
   CartPage,
@@ -28,72 +31,86 @@ export const router = createBrowserRouter([
     element: <PortalLayout />,
     children: [
       { index: true, element: <HomePage /> },
-      { path: 'shop', element: <ShopPage /> },
-      { path: 'products/:slug', element: <ProductPage /> },
-      { path: 'cart', element: <CartPage /> },
-      { path: 'checkout/address', element: <CheckoutAddressPage /> },
-      { path: 'checkout/payment', element: <CheckoutPaymentPage /> },
-      { path: 'checkout/success', element: <CheckoutSuccessPage /> },
-      { path: 'account/profile', element: <ProfilePage /> },
-      { path: 'account/orders', element: <OrdersPage /> },
-      { path: 'account/orders/:orderNumber', element: <OrderDetailPage /> },
-      { path: 'account/invoices/:invoiceNumber', element: <InvoiceDetailPage /> }
-    ]
-  },
-  { path: '/login', element: <LoginPage /> },
-  { path: '/signup', element: <SignupPage /> },
-  { path: '/reset-password', element: <ResetPasswordPage /> },
-  {
-    path: '/admin',
-    element: <AdminLayout />,
-    children: [
-      { index: true, element: <DashboardPage /> },
       {
-        path: 'subscriptions',
-        element: (
-          <ResourceListPage
-            title="Subscriptions"
-            description="Draft, quotation, confirmed, and active subscriptions."
-          />
-        )
-      },
-      { path: 'subscriptions/new', element: <SubscriptionFormPage /> },
-      {
-        path: 'products',
-        element: (
-          <ResourceListPage
-            title="Products"
-            description="Catalog records, variants, and subscription-enabled products."
-          />
-        )
-      },
-      {
-        path: 'recurring-plans',
-        element: (
-          <ResourceListPage
-            title="Recurring Plans"
-            description="Billing cadence, minimum quantity, and auto-close policy."
-          />
-        )
-      },
-      {
-        path: 'discounts',
-        element: (
-          <ResourceListPage
-            title="Discounts"
-            description="Admin-only discount rules and usage limits."
-          />
-        )
-      },
-      {
-        path: 'reports',
-        element: (
-          <ResourceListPage
-            title="Reports"
-            description="Revenue, active subscriptions, and overdue invoices."
-          />
-        )
+        element: <RequireAuth />,
+        children: [
+          { path: 'shop', element: <ShopPage /> },
+          { path: 'products/:slug', element: <ProductPage /> },
+          { path: 'cart', element: <CartPage /> },
+          { path: 'checkout/address', element: <CheckoutAddressPage /> },
+          { path: 'checkout/payment', element: <CheckoutPaymentPage /> },
+          { path: 'checkout/success', element: <CheckoutSuccessPage /> },
+          { path: 'account/profile', element: <ProfilePage /> },
+          { path: 'account/orders', element: <OrdersPage /> },
+          { path: 'account/orders/:id', element: <OrderDetailPage /> },
+          { path: 'account/invoices/:id', element: <InvoiceDetailPage /> }
+        ]
       }
     ]
-  }
+  },
+  {
+    element: <RequireGuest />,
+    children: [
+      { path: '/login', element: <LoginPage /> },
+      { path: '/signup', element: <SignupPage /> },
+      { path: '/reset-password', element: <ResetPasswordPage /> }
+    ]
+  },
+  {
+    path: '/admin',
+    element: <RequireAuth roles={['admin', 'internal_user']} />,
+    children: [
+      {
+        element: <AdminLayout />,
+        children: [
+          { index: true, element: <DashboardPage /> },
+          {
+            path: 'subscriptions',
+            element: (
+              <ResourceListPage
+                description="Draft, quotation, confirmed, and active subscriptions."
+                resource="subscriptions"
+                title="Subscriptions"
+              />
+            )
+          },
+          { path: 'subscriptions/new', element: <SubscriptionFormPage /> },
+          {
+            path: 'products',
+            element: (
+              <ResourceListPage
+                description="Catalog records, variants, and subscription-enabled products."
+                resource="products"
+                title="Products"
+              />
+            )
+          },
+          {
+            path: 'recurring-plans',
+            element: (
+              <ResourceListPage
+                description="Billing cadence, minimum quantity, and auto-close policy."
+                resource="recurring-plans"
+                title="Recurring Plans"
+              />
+            )
+          },
+          { path: 'taxes', element: <TaxListPage /> },
+          {
+            path: 'discounts',
+            element: (
+              <ResourceListPage
+                description="Admin-only discount rules and usage limits."
+                resource="discounts"
+                title="Discounts"
+              />
+            )
+          },
+          { path: 'reports', element: <ReportsPage /> },
+          { path: '*', element: <Navigate replace to="/admin" /> }
+        ]
+      }
+    ]
+  },
+  { path: '*', element: <Navigate replace to="/" /> }
 ]);

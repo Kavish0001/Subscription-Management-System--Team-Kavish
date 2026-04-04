@@ -8,10 +8,18 @@ import { env } from '../../config/env.js';
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 
+function validateJwtTtl(value: string): SignOptions['expiresIn'] {
+  if (!/^\d+[smhd]$/i.test(value)) {
+    throw new AppError('Invalid JWT TTL format', 500, 'INVALID_JWT_TTL');
+  }
+
+  return value as SignOptions['expiresIn'];
+}
+
 function issueAccessToken(user: SessionUser) {
   const options: SignOptions = {
     subject: user.id,
-    expiresIn: env.ACCESS_TOKEN_TTL as SignOptions['expiresIn']
+    expiresIn: validateJwtTtl(env.ACCESS_TOKEN_TTL)
   };
 
   return jwt.sign({ email: user.email, role: user.role }, env.JWT_ACCESS_SECRET, options);
@@ -20,7 +28,7 @@ function issueAccessToken(user: SessionUser) {
 function issueRefreshToken(user: SessionUser) {
   const options: SignOptions = {
     subject: user.id,
-    expiresIn: env.REFRESH_TOKEN_TTL as SignOptions['expiresIn']
+    expiresIn: validateJwtTtl(env.REFRESH_TOKEN_TTL)
   };
 
   return jwt.sign({ email: user.email, role: user.role }, env.JWT_REFRESH_SECRET, options);
@@ -96,7 +104,7 @@ export async function login(input: unknown) {
   });
 
   if (!user) {
-    throw new AppError('Account does not exist', 404, 'ACCOUNT_NOT_FOUND');
+    throw new AppError('Account not exist', 404, 'ACCOUNT_NOT_FOUND');
   }
 
   const passwordMatches = await argon2.verify(user.passwordHash, payload.password);
@@ -119,5 +127,33 @@ export async function login(input: unknown) {
     accessToken: issueAccessToken(sessionUser),
     refreshToken: issueRefreshToken(sessionUser),
     user: sessionUser
+  };
+}
+
+export async function requestPasswordReset(input: unknown) {
+  const email = String(input ?? '')
+    .trim()
+    .toLowerCase();
+
+  if (!email) {
+    throw new AppError('Email is required', 400, 'EMAIL_REQUIRED');
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email }
+  });
+
+  if (user) {
+    await prisma.auditLog.create({
+      data: {
+        entityType: 'user',
+        entityId: user.id,
+        action: 'password_reset_requested'
+      }
+    }).catch(() => undefined);
+  }
+
+  return {
+    message: 'The password reset link has been sent to your email.'
   };
 }

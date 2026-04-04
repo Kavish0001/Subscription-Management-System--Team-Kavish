@@ -5,11 +5,13 @@ export function Shell({
   title,
   subtitle,
   navigation,
+  toolbar,
   children,
 }: PropsWithChildren<{
   title: string;
   subtitle: string;
   navigation: Array<{ label: string; to: string }>;
+  toolbar?: ReactNode;
 }>) {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.18),_transparent_25%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.16),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)] text-slate-50">
@@ -48,6 +50,7 @@ export function Shell({
               <p className="mb-2 text-xs uppercase tracking-[0.28em] text-amber-300">{subtitle}</p>
               <h1 className="text-4xl font-black tracking-tight">{title}</h1>
             </div>
+            {toolbar}
           </header>
           <section className="grid gap-5 xl:grid-cols-12">{children}</section>
         </main>

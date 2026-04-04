@@ -1,16 +1,110 @@
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+
 import { MetricCard, Surface } from '../../components/layout';
+import { apiRequest, formatCurrency, formatDate, type DashboardMetrics, type Invoice, type Subscription } from '../../lib/api';
+import { useSession } from '../../lib/session';
 
 export function DashboardPage() {
+  const { token } = useSession();
+
+  const metricsQuery = useQuery({
+    queryKey: ['admin-dashboard'],
+    queryFn: () => apiRequest<DashboardMetrics>('/reports/dashboard', { token })
+  });
+
+  const subscriptionsQuery = useQuery({
+    queryKey: ['admin-dashboard-subscriptions'],
+    queryFn: () => apiRequest<Subscription[]>('/subscriptions', { token })
+  });
+
+  const invoicesQuery = useQuery({
+    queryKey: ['admin-dashboard-invoices'],
+    queryFn: () => apiRequest<Invoice[]>('/invoices', { token })
+  });
+
+  const metrics = metricsQuery.data;
+  const recentSubscriptions = subscriptionsQuery.data?.slice(0, 5) ?? [];
+  const recentInvoices = invoicesQuery.data?.slice(0, 5) ?? [];
+
   return (
     <>
-      <MetricCard label="Active subscriptions" value="128" detail="Live contracts under billing." />
-      <MetricCard label="MRR" value="INR 4.2L" detail="Updated from paid invoices." />
-      <MetricCard label="Overdue invoices" value="12" detail="Needs collection attention." />
-      <Surface title="Workflow coverage">
-        <p className="max-w-3xl text-slate-300">
-          This scaffold already includes admin catalog routes, subscription creation, invoice
-          generation, mock payments, role-based auth, and portal navigation.
-        </p>
+      <MetricCard
+        detail="Moved from confirmed checkout to active status."
+        label="Active subscriptions"
+        value={String(metrics?.activeSubscriptions ?? 0)}
+      />
+      <MetricCard
+        detail="Sum of paid invoices."
+        label="Revenue"
+        value={formatCurrency(metrics?.revenue ?? 0)}
+      />
+      <MetricCard
+        detail="Draft or confirmed invoices past due date."
+        label="Overdue invoices"
+        value={String(metrics?.overdueInvoices ?? 0)}
+      />
+      <Surface
+        actions={
+          <Link
+            className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950"
+            to="/admin/subscriptions/new"
+          >
+            New subscription
+          </Link>
+        }
+        title="Recent activity"
+      >
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5">
+            <p className="mb-3 text-sm font-semibold text-slate-200">Recent subscriptions</p>
+            <div className="grid gap-3">
+              {recentSubscriptions.map((subscription) => (
+                <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3" key={subscription.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-white">{subscription.subscriptionNumber}</p>
+                      <p className="text-sm text-slate-300">{subscription.customerContact.name}</p>
+                    </div>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-300">
+                      {subscription.status}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-400">
+                    {formatDate(subscription.createdAt)} • {formatCurrency(subscription.totalAmount)}
+                  </p>
+                </div>
+              ))}
+              {recentSubscriptions.length === 0 ? (
+                <p className="text-sm text-slate-400">No subscriptions yet.</p>
+              ) : null}
+            </div>
+          </div>
+          <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-5">
+            <p className="mb-3 text-sm font-semibold text-slate-200">Recent invoices</p>
+            <div className="grid gap-3">
+              {recentInvoices.map((invoice) => (
+                <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3" key={invoice.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-white">{invoice.invoiceNumber}</p>
+                      <p className="text-sm text-slate-300">{invoice.subscriptionOrder?.subscriptionNumber ?? 'Subscription'}</p>
+                    </div>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-emerald-300">
+                      {invoice.status}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-400">
+                    Due {formatDate(invoice.dueDate)} • {formatCurrency(invoice.totalAmount)}
+                  </p>
+                </div>
+              ))}
+              {recentInvoices.length === 0 ? (
+                <p className="text-sm text-slate-400">No invoices generated yet.</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
       </Surface>
     </>
   );
