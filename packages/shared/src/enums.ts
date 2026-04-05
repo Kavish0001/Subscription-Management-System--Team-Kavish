@@ -9,11 +9,10 @@ export const subscriptionStatuses = [
   'quotation',
   'quotation_sent',
   'confirmed',
-  'in_progress',
+  'active',
   'paused',
   'closed',
-  'cancelled',
-  'churned',
+  'cancelled'
 ] as const;
 export const invoiceStatuses = ['draft', 'confirmed', 'cancelled', 'paid'] as const;
 export const paymentStatuses = ['pending', 'succeeded', 'failed'] as const;

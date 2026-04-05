@@ -14,7 +14,7 @@ reportsRouter.get('/dashboard', async (_request, response) => {
   await syncSubscriptionOperationalStatuses(prisma);
 
   const [activeSubscriptions, invoicesPaid, revenueAgg, overdueInvoices] = await Promise.all([
-    prisma.subscriptionOrder.count({ where: { status: SubscriptionStatus.in_progress } }),
+    prisma.subscriptionOrder.count({ where: { status: SubscriptionStatus.active } }),
     prisma.invoice.count({ where: { status: 'paid' } }),
     prisma.invoice.aggregate({
       _sum: { totalAmount: true },

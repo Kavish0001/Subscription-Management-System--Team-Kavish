@@ -14,8 +14,6 @@ import { buildSubscriptionPricing } from '../subscriptions/pricing.js';
 export const billingRouter = Router();
 type InvoiceIdParams = { id: string };
 
-billingRouter.use(requireAuth);
-
 function assertInvoiceAccess(
   auth: AuthenticatedRequest['auth'],
   ownerUserId: string | null | undefined,
@@ -64,7 +62,13 @@ function groupPortalCheckoutLines(lines: z.infer<typeof portalCheckoutSchema>['l
 
   for (const line of lines) {
     const key = line.recurringPlanId ?? 'no-plan';
-    groupedLines.set(key, [...(groupedLines.get(key) ?? []), line]);
+    const existing = groupedLines.get(key);
+    if (existing) {
+      existing.push(line);
+      continue;
+    }
+
+    groupedLines.set(key, [line]);
   }
 
   return groupedLines;
@@ -135,7 +139,98 @@ async function resolveCheckoutContact(auth: NonNullable<AuthenticatedRequest['au
   return created;
 }
 
-async function buildPortalCheckoutSummary(
+async function sanitizeCheckoutLines(
+  db: typeof prisma,
+  lines: Array<{
+    productId: string;
+    recurringPlanId?: string | null;
+    variantId?: string;
+    quantity: number;
+  }>
+) {
+  const productIds = [...new Set(lines.map((line) => line.productId))];
+  const products = await db.product.findMany({
+    where: {
+      id: {
+        in: productIds
+      },
+      isActive: true
+    },
+    select: {
+      id: true,
+      planPricing: {
+        orderBy: [{ isDefaultPlan: 'desc' }, { createdAt: 'asc' }],
+        select: {
+          recurringPlanId: true,
+          isDefaultPlan: true
+        }
+      },
+      variants: {
+        where: {
+          isActive: true
+        },
+        select: {
+          id: true
+        }
+      }
+    }
+  });
+
+  if (products.length !== productIds.length) {
+    const availableProductIds = new Set(products.map((product) => product.id));
+    const missingProductIds = productIds.filter((productId) => !availableProductIds.has(productId));
+
+    throw new AppError('One or more products could not be found', 404, 'PRODUCT_NOT_FOUND', {
+      missingProductIds
+    });
+  }
+
+  const productsById = new Map(products.map((product) => [product.id, product]));
+  const mergedLines = new Map<
+    string,
+    {
+      productId: string;
+      recurringPlanId: string | null;
+      variantId?: string;
+      quantity: number;
+    }
+  >();
+
+  for (const line of lines) {
+    const product = productsById.get(line.productId);
+
+    if (!product) {
+      throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+    }
+
+    const availablePlanIds = new Set(product.planPricing.map((entry) => entry.recurringPlanId));
+    const defaultPlanId = product.planPricing.find((entry) => entry.isDefaultPlan)?.recurringPlanId ?? product.planPricing[0]?.recurringPlanId ?? null;
+    const resolvedPlanId =
+      line.recurringPlanId && availablePlanIds.has(line.recurringPlanId)
+        ? line.recurringPlanId
+        : defaultPlanId;
+    const availableVariantIds = new Set(product.variants.map((variant) => variant.id));
+    const resolvedVariantId = line.variantId && availableVariantIds.has(line.variantId) ? line.variantId : undefined;
+    const key = `${line.productId}::${resolvedPlanId ?? 'no-plan'}::${resolvedVariantId ?? 'base'}`;
+    const existing = mergedLines.get(key);
+
+    if (existing) {
+      existing.quantity += line.quantity;
+      continue;
+    }
+
+    mergedLines.set(key, {
+      productId: line.productId,
+      recurringPlanId: resolvedPlanId,
+      variantId: resolvedVariantId,
+      quantity: line.quantity
+    });
+  }
+
+  return [...mergedLines.values()];
+}
+
+async function computePortalCheckoutPricing(
   db: typeof prisma,
   payload: {
     discountCode?: string;
@@ -148,12 +243,25 @@ async function buildPortalCheckoutSummary(
   },
 ) {
   try {
-    const groupedLines = new Map<string, typeof payload.lines>();
-    for (const line of payload.lines) {
-      const key = line.recurringPlanId ?? 'no-plan';
-      groupedLines.set(key, [...(groupedLines.get(key) ?? []), line]);
-    }
+    const sanitizedLines = await sanitizeCheckoutLines(db, payload.lines);
+    const groupedLines = groupPortalCheckoutLines(sanitizedLines);
+    const recurringPlanIds = [...groupedLines.keys()].filter((key) => key !== 'no-plan');
+    const recurringPlans = recurringPlanIds.length
+      ? await db.recurringPlan.findMany({
+          where: {
+            id: {
+              in: recurringPlanIds
+            }
+          }
+        })
+      : [];
+    const recurringPlansById = new Map(recurringPlans.map((plan) => [plan.id, plan]));
 
+    const pricedGroups: Array<{
+      recurringPlan: (typeof recurringPlans)[number] | null;
+      lines: typeof payload.lines;
+      pricing: Awaited<ReturnType<typeof buildSubscriptionPricing>>;
+    }> = [];
     const items: Array<{
       productId: string;
       recurringPlanId: string | null;
@@ -171,12 +279,7 @@ async function buildPortalCheckoutSummary(
     let totalAmount = 0;
 
     for (const [planKey, lines] of groupedLines.entries()) {
-      const recurringPlan =
-        planKey === 'no-plan'
-          ? null
-          : await db.recurringPlan.findUnique({
-              where: { id: planKey }
-            });
+      const recurringPlan = planKey === 'no-plan' ? null : recurringPlansById.get(planKey) ?? null;
 
       if (planKey !== 'no-plan' && !recurringPlan) {
         throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
@@ -197,28 +300,32 @@ async function buildPortalCheckoutSummary(
       taxAmount += Number(pricing.taxAmount);
       totalAmount += Number(pricing.totalAmount);
 
-      pricing.lines
-        .slice()
-        .sort((left, right) => left.sortOrder - right.sortOrder)
-        .forEach((line, index) => {
-          items.push({
-            productId: line.productId,
-            recurringPlanId: recurringPlan?.id ?? null,
-            variantId: line.variantId ?? null,
-            quantity: line.quantity,
-            unitPrice: line.unitPrice,
-            discountAmount: line.discountAmount,
-            taxAmount: line.taxAmount,
-            lineTotal: line.lineTotal
-          });
+      pricedGroups.push({
+        recurringPlan,
+        lines,
+        pricing
+      });
 
-          if (!lines[index]) {
-            throw new AppError('Checkout summary line mismatch', 500);
-          }
+      pricing.lines.forEach((line, index) => {
+        if (!lines[index]) {
+          throw new AppError('Checkout summary line mismatch', 500);
+        }
+
+        items.push({
+          productId: line.productId,
+          recurringPlanId: recurringPlan?.id ?? null,
+          variantId: line.variantId ?? null,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          discountAmount: line.discountAmount,
+          taxAmount: line.taxAmount,
+          lineTotal: line.lineTotal
         });
+      });
     }
 
     return {
+      pricedGroups,
       items,
       subtotalAmount: roundMoney(subtotalAmount),
       discountAmount: roundMoney(discountAmount),
@@ -235,7 +342,24 @@ async function buildPortalCheckoutSummary(
   }
 }
 
-billingRouter.get('/invoices', async (request, response) => {
+async function buildPortalCheckoutSummary(
+  db: typeof prisma,
+  payload: {
+    discountCode?: string;
+    lines: Array<{
+      productId: string;
+      recurringPlanId?: string | null;
+      variantId?: string;
+      quantity: number;
+    }>;
+  },
+) {
+  const { pricedGroups: _pricedGroups, ...summary } = await computePortalCheckoutPricing(db, payload);
+  void _pricedGroups;
+  return summary;
+}
+
+billingRouter.get('/invoices', requireAuth, async (request, response) => {
   await syncSubscriptionOperationalStatuses(prisma);
 
   const auth = (request as AuthenticatedRequest).auth;
@@ -275,7 +399,7 @@ billingRouter.get('/invoices', async (request, response) => {
   response.json({ data: invoices });
 });
 
-billingRouter.get('/invoices/:id', async (request: Request<InvoiceIdParams>, response, next) => {
+billingRouter.get('/invoices/:id', requireAuth, async (request: Request<InvoiceIdParams>, response, next) => {
   try {
     await syncSubscriptionOperationalStatuses(prisma);
 
@@ -317,7 +441,7 @@ billingRouter.post('/checkout/summary', async (request, response, next) => {
   }
 });
 
-billingRouter.post('/payments/razorpay/order', async (request, response, next) => {
+billingRouter.post('/payments/razorpay/order', requireAuth, async (request, response, next) => {
   try {
     await syncSubscriptionOperationalStatuses(prisma);
 
@@ -330,18 +454,17 @@ billingRouter.post('/payments/razorpay/order', async (request, response, next) =
 
     if (payload.purpose === 'checkout') {
       const contact = await resolveCheckoutContact(auth);
-
-      const summary = await buildPortalCheckoutSummary(prisma, {
+      const pricedCheckout = await computePortalCheckoutPricing(prisma, {
         discountCode: payload.discountCode,
         lines: payload.lines
       });
 
-      if (Number(summary.totalAmount) <= 0) {
+      if (pricedCheckout.totalAmount <= 0) {
         throw new AppError('Checkout total must be greater than zero', 409);
       }
 
       const razorpayOrder = await createRazorpayOrder({
-        amountPaise: toPaise(Number(summary.totalAmount)),
+        amountPaise: toPaise(pricedCheckout.totalAmount),
         currency: 'INR',
         receipt: `checkout-${Date.now()}`,
         notes: {
@@ -350,42 +473,20 @@ billingRouter.post('/payments/razorpay/order', async (request, response, next) =
         }
       });
 
-      const groupedLines = groupPortalCheckoutLines(payload.lines);
-
       const created = await prisma.$transaction(
         async (tx) => {
           const subscriptionIds: string[] = [];
           const invoiceIds: string[] = [];
 
-          for (const [planKey, lines] of groupedLines.entries()) {
-            const recurringPlan =
-              planKey === 'no-plan'
-                ? null
-                : await tx.recurringPlan.findUnique({
-                    where: { id: planKey }
-                  });
-
-            if (planKey !== 'no-plan' && !recurringPlan) {
-              throw new AppError('Recurring plan not found', 404, 'RECURRING_PLAN_NOT_FOUND');
-            }
-
+          for (const group of pricedCheckout.pricedGroups) {
             const now = new Date();
-            const pricing = await buildSubscriptionPricing(tx, {
-              recurringPlanId: recurringPlan?.id ?? null,
-              discountCode: payload.discountCode,
-              lines: lines.map((line) => ({
-                productId: line.productId,
-                variantId: line.variantId,
-                quantity: line.quantity
-              }))
-            });
 
             const subscription = await tx.subscriptionOrder.create({
               data: {
                 subscriptionNumber: `SUB-${Date.now()}-${subscriptionIds.length + 1}`,
                 customerContactId: contact.id,
                 salespersonUserId: auth.userId,
-                recurringPlanId: recurringPlan?.id,
+                recurringPlanId: group.recurringPlan?.id,
                 sourceChannel: auth.role === 'portal_user' ? 'portal' : 'admin',
                 status: SubscriptionStatus.confirmed,
                 quotationDate: now,
@@ -393,22 +494,22 @@ billingRouter.post('/payments/razorpay/order', async (request, response, next) =
                 confirmedAt: now,
                 startDate: now,
                 nextInvoiceDate: now,
-                expirationDate: recurringPlan
+                expirationDate: group.recurringPlan
                   ? resolveAutoCloseDate({
                       startDate: now,
-                      autoCloseEnabled: recurringPlan.autoCloseEnabled,
-                      autoCloseAfterCount: recurringPlan.autoCloseAfterCount,
-                      autoCloseAfterUnit: recurringPlan.autoCloseAfterUnit
+                      autoCloseEnabled: group.recurringPlan.autoCloseEnabled,
+                      autoCloseAfterCount: group.recurringPlan.autoCloseAfterCount,
+                      autoCloseAfterUnit: group.recurringPlan.autoCloseAfterUnit
                     })
                   : null,
                 paymentTermLabel: 'Immediate payment',
-                subtotalAmount: pricing.subtotalAmount,
-                discountAmount: pricing.discountAmount,
-                taxAmount: pricing.taxAmount,
-                totalAmount: pricing.totalAmount,
+                subtotalAmount: group.pricing.subtotalAmount,
+                discountAmount: group.pricing.discountAmount,
+                taxAmount: group.pricing.taxAmount,
+                totalAmount: group.pricing.totalAmount,
                 notes: payload.notes,
                 lines: {
-                  create: pricing.lines
+                  create: group.pricing.lines
                 }
               },
               include: {
@@ -461,7 +562,7 @@ billingRouter.post('/payments/razorpay/order', async (request, response, next) =
                   purpose: 'checkout',
                   razorpayOrderId: razorpayOrder.id,
                   paymentMethod: payload.paymentMethod,
-                  appliedDiscountRuleId: pricing.appliedDiscountRuleId
+                  appliedDiscountRuleId: group.pricing.appliedDiscountRuleId
                 }
               }
             });
@@ -610,7 +711,7 @@ billingRouter.post('/payments/razorpay/order', async (request, response, next) =
   }
 });
 
-billingRouter.post('/payments/razorpay/verify', async (request, response, next) => {
+billingRouter.post('/payments/razorpay/verify', requireAuth, async (request, response, next) => {
   try {
     await syncSubscriptionOperationalStatuses(prisma);
 
@@ -714,26 +815,17 @@ billingRouter.post('/payments/razorpay/verify', async (request, response, next) 
             }
           });
 
-          const nextSubscriptionState =
-            payment.invoice.subscriptionOrder.startDate && payment.invoice.subscriptionOrder.startDate <= now
-              ? SubscriptionStatus.in_progress
-              : SubscriptionStatus.confirmed;
-
           await tx.subscriptionOrder.update({
             where: { id: payment.invoice.subscriptionOrderId },
             data: {
-              status: nextSubscriptionState,
-              ...(payload.purpose === 'checkout'
-                ? {
-                    nextInvoiceDate: payment.invoice.subscriptionOrder.recurringPlan
-                      ? nextInvoiceDateFromPlan(
-                          now,
-                          payment.invoice.subscriptionOrder.recurringPlan.intervalUnit,
-                          payment.invoice.subscriptionOrder.recurringPlan.intervalCount ?? 1
-                        )
-                      : null
-                  }
-                : {})
+              status: SubscriptionStatus.active,
+              nextInvoiceDate: payment.invoice.subscriptionOrder.recurringPlan
+                ? nextInvoiceDateFromPlan(
+                    now,
+                    payment.invoice.subscriptionOrder.recurringPlan.intervalUnit,
+                    payment.invoice.subscriptionOrder.recurringPlan.intervalCount ?? 1
+                  )
+                : null
             }
           });
 

@@ -110,6 +110,7 @@ export function ProfilePage() {
       description="Manage your contact details, billing address, and security settings in one place."
       title="My Account"
     >
+      <AccountTabs active="profile" />
       <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="app-card grid gap-4 p-6 md:grid-cols-2">
           <div className="md:col-span-2">
@@ -189,7 +190,12 @@ export function OrdersPage() {
   const totalPages = Math.max(1, Math.ceil(totalOrders / ORDERS_PAGE_SIZE));
 
   return (
-    <Surface description="Review subscription orders, totals, and printable details." title="My Orders">
+    <Surface description="Review subscription orders, totals, and printable details." title="My Account">
+      <AccountTabs active="orders" />
+      <div className="mb-5">
+        <p className="eyebrow mb-2">Orders</p>
+        <h3 className="section-title">My Orders</h3>
+      </div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-sm muted">
         <p>
           Showing {orders.length ? (page - 1) * ORDERS_PAGE_SIZE + 1 : 0}-{Math.min(page * ORDERS_PAGE_SIZE, totalOrders)} of {totalOrders} orders
@@ -339,6 +345,7 @@ export function InvoiceDetailPage() {
         </div>
       }
     >
+      <AccountTabs active="orders" />
       {paymentError ? <p className="theme-message theme-message-error mb-4">{paymentError}</p> : null}
       <div className="invoice-screen-summary mb-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="app-card p-5">
@@ -531,16 +538,16 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
   const canConfirm = mode === 'detail' && ['draft', 'quotation', 'quotation_sent'].includes(subscription?.status ?? '');
   const canRenew =
     mode === 'detail' &&
-    ['confirmed', 'in_progress', 'closed'].includes(subscription?.status ?? '') &&
+    ['confirmed', 'active', 'closed'].includes(subscription?.status ?? '') &&
     Boolean(subscription?.recurringPlan?.isRenewable);
-  const canUpsell = mode === 'detail' && ['confirmed', 'in_progress', 'closed'].includes(subscription?.status ?? '');
+  const canUpsell = mode === 'detail' && ['confirmed', 'active', 'closed'].includes(subscription?.status ?? '');
   const canClose =
     mode === 'detail' &&
-    ['confirmed', 'in_progress'].includes(subscription?.status ?? '') &&
+    ['confirmed', 'active'].includes(subscription?.status ?? '') &&
     Boolean(subscription?.recurringPlan?.isClosable);
   const canPause =
     mode === 'detail' &&
-    ['confirmed', 'in_progress'].includes(subscription?.status ?? '') &&
+    ['confirmed', 'active'].includes(subscription?.status ?? '') &&
     Boolean(subscription?.recurringPlan?.isPausable);
   const canResume = mode === 'detail' && subscription?.status === 'paused' && Boolean(subscription?.recurringPlan?.isPausable);
   const shouldPrint = mode === 'detail' && searchParams.get('print') === '1';
@@ -616,6 +623,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
         ) : null
       }
     >
+      <AccountTabs active="orders" />
       {mode === 'preview' ? (
         <p className="theme-message theme-message-warning mb-4">
           Quotation preview. Review plan, billing, products, and totals before confirmation.
@@ -761,6 +769,35 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
       {label}
       <div className="app-readonly">{value}</div>
     </label>
+  );
+}
+
+function AccountTabs({
+  active
+}: Readonly<{
+  active: 'profile' | 'orders';
+}>) {
+  const tabs = [
+    { id: 'profile' as const, label: 'Profile', to: '/account/profile' },
+    { id: 'orders' as const, label: 'Orders', to: '/account/orders' }
+  ];
+
+  return (
+    <div className="mb-6 flex flex-wrap gap-2 rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] p-2">
+      {tabs.map((tab) => (
+        <Link
+          className={
+            tab.id === active
+              ? 'rounded-[18px] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--color-text-primary)] shadow-[0_10px_24px_rgba(15,23,42,0.08)]'
+              : 'rounded-[18px] px-4 py-2 text-sm font-medium text-[color:var(--color-text-secondary)] transition hover:bg-white/70 hover:text-[color:var(--color-text-primary)]'
+          }
+          key={tab.id}
+          to={tab.to}
+        >
+          {tab.label}
+        </Link>
+      ))}
+    </div>
   );
 }
 

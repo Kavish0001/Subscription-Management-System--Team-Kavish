@@ -297,7 +297,7 @@ subscriptionsRouter.get('/', async (request, response) => {
   const listQuery = subscriptionListQuerySchema.parse(request.query);
   const statusFilter =
     listQuery.status === 'active'
-      ? SubscriptionStatus.in_progress
+      ? SubscriptionStatus.active
       : listQuery.status && Object.values(SubscriptionStatus).includes(listQuery.status as SubscriptionStatus)
         ? (listQuery.status as SubscriptionStatus)
         : undefined;
@@ -826,7 +826,7 @@ subscriptionsRouter.post('/:id/resume', requireRole('admin', 'internal_user', 'p
     const subscription = await prisma.subscriptionOrder.update({
       where: { id },
       data: {
-        status: existing.startDate && existing.startDate <= new Date() ? SubscriptionStatus.in_progress : SubscriptionStatus.confirmed
+        status: existing.startDate && existing.startDate <= new Date() ? SubscriptionStatus.active : SubscriptionStatus.confirmed
       }
     });
 

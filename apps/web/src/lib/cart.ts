@@ -19,6 +19,7 @@ type CartState = {
   discountCode: string;
   discountPercent: number;
   addItem: (item: CartItem) => void;
+  removeProducts: (productIds: string[]) => void;
   removeItem: (productId: string, recurringPlanId: string | null, variantId?: string | null) => void;
   updateQuantity: (productId: string, recurringPlanId: string | null, quantity: number, variantId?: string | null) => void;
   applyDiscount: (code: string) => boolean;
@@ -55,6 +56,14 @@ export const useCartStore = create<CartState>()(
                   }
                 : entry
             )
+          };
+        }),
+      removeProducts: (productIds) =>
+        set((state) => {
+          const blockedProductIds = new Set(productIds);
+
+          return {
+            items: state.items.filter((entry) => !blockedProductIds.has(entry.productId))
           };
         }),
       removeItem: (productId, recurringPlanId, variantId = null) =>

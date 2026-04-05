@@ -47,6 +47,19 @@ describe('cart store', () => {
     expect(useCartStore.getState().items).toEqual([]);
   });
 
+  it('removes all cart entries for unavailable products', () => {
+    useCartStore.getState().addItem(baseItem);
+    useCartStore.getState().addItem({
+      ...baseItem,
+      productId: 'prod-2',
+      recurringPlanId: 'plan-2'
+    });
+
+    useCartStore.getState().removeProducts(['prod-2']);
+
+    expect(useCartStore.getState().items).toEqual([baseItem]);
+  });
+
   it('computes cart subtotals', () => {
     expect(
       cartSubtotal([

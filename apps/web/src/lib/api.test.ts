@@ -61,11 +61,16 @@ describe('web api helpers', () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 401,
-        json: async () => ({ error: { message: 'Unauthorized' } })
+        json: async () => ({ error: { message: 'Unauthorized', code: 'UNAUTHORIZED', details: { scope: 'session' } } })
       })
     );
 
-    await expect(apiRequest('/secure')).rejects.toEqual(new ApiError('Unauthorized', 401));
+    await expect(apiRequest('/secure')).rejects.toMatchObject({
+      message: 'Unauthorized',
+      status: 401,
+      code: 'UNAUTHORIZED',
+      details: { scope: 'session' }
+    });
   });
 
   it('formats missing dates defensively', () => {

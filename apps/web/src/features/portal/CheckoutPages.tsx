@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PrinterIcon } from '../../components/icons';
@@ -48,28 +48,12 @@ export function CartPage() {
   const [discountFeedback, setDiscountFeedback] = useState<string | null>(null);
   const summaryQuery = useCheckoutSummary(token, isAuthenticated);
   const summaryItems = useSummaryItems(summaryQuery.data);
-  const guestSummary = useMemo(
-    () => ({
-      items: items.map((item) => ({
-        productId: item.productId,
-        recurringPlanId: item.recurringPlanId,
-        variantId: item.variantId ?? null,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        discountAmount: 0,
-        taxAmount: 0,
-        lineTotal: item.unitPrice * item.quantity
-      })),
-      subtotalAmount: cartSubtotal(items),
-      discountAmount: 0,
-      taxAmount: 0,
-      totalAmount: cartSubtotal(items),
-      appliedDiscountCode: null,
-      hasDiscount: false
-    }),
-    [items]
+  const localSummary = useMemo(
+    () => buildLocalCheckoutSummary(items, discountCode || null),
+    [discountCode, items]
   );
-  const displayedSummary = isAuthenticated ? summaryQuery.data : guestSummary;
+  const displayedSummary = summaryQuery.data ?? localSummary;
+  const summaryError = summaryQuery.cartRecoveryMessage ?? resolveCheckoutSummaryError(summaryQuery.error, displayedSummary);
 
   return (
     <CheckoutShell
@@ -175,8 +159,9 @@ export function CartPage() {
             }
             showDiscountInput={isAuthenticated}
             summary={displayedSummary}
-            summaryError={isAuthenticated && summaryQuery.error instanceof ApiError ? summaryQuery.error.message : null}
+            summaryError={isAuthenticated ? summaryError : null}
             summaryLoading={isAuthenticated && summaryQuery.isPending}
+            showDiscountEligibilityWarning={Boolean(summaryQuery.data)}
           />
         </div>
       )}
@@ -188,6 +173,7 @@ export function CheckoutAddressPage() {
   const navigate = useNavigate();
   const { isAuthenticated, token } = useSession();
   const items = useCartStore((state) => state.items);
+  const discountCode = useCartStore((state) => state.discountCode);
   const [useAlternateAddress, setUseAlternateAddress] = useState(false);
   const [addressError, setAddressError] = useState<string | null>(null);
   const [alternateAddress, setAlternateAddress] = useState<CheckoutAddress>({
@@ -200,6 +186,11 @@ export function CheckoutAddressPage() {
   });
   const contactQuery = usePortalContact(token);
   const summaryQuery = useCheckoutSummary(token, isAuthenticated);
+  const localSummary = useMemo(
+    () => buildLocalCheckoutSummary(items, discountCode || null),
+    [discountCode, items]
+  );
+  const summaryError = summaryQuery.cartRecoveryMessage ?? resolveCheckoutSummaryError(summaryQuery.error, summaryQuery.data ?? localSummary);
 
   const defaultAddress =
     contactQuery.data?.addresses.find((address) => address.isDefault) ?? contactQuery.data?.addresses[0];
@@ -331,9 +322,10 @@ export function CheckoutAddressPage() {
                   : 'The saved profile address is selected by default.'}
               </div>
             }
-            summary={summaryQuery.data}
-            summaryError={summaryQuery.error instanceof ApiError ? summaryQuery.error.message : null}
+            summary={summaryQuery.data ?? localSummary}
+            summaryError={summaryError}
             summaryLoading={summaryQuery.isPending}
+            showDiscountEligibilityWarning={Boolean(summaryQuery.data)}
           />
         </div>
       )}
@@ -351,6 +343,11 @@ export function CheckoutPaymentPage() {
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'upi' | 'netbanking'>('card');
   const [error, setError] = useState<string | null>(null);
   const summaryQuery = useCheckoutSummary(token, isAuthenticated);
+  const localSummary = useMemo(
+    () => buildLocalCheckoutSummary(items, discountCode || null),
+    [discountCode, items]
+  );
+  const summaryError = summaryQuery.cartRecoveryMessage ?? resolveCheckoutSummaryError(summaryQuery.error, summaryQuery.data ?? localSummary);
 
   const paymentMutation = useMutation({
     mutationFn: async () => {
@@ -469,7 +466,7 @@ export function CheckoutPaymentPage() {
             actions={
               <button
                 className="inline-flex w-full items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={paymentMutation.isPending || summaryQuery.isPending}
+                disabled={paymentMutation.isPending || summaryQuery.isPending || Boolean(summaryQuery.error)}
                 onClick={() => paymentMutation.mutate()}
                 type="button"
               >
@@ -481,9 +478,10 @@ export function CheckoutPaymentPage() {
                 Selected method: <span className="font-semibold text-slate-950">{paymentMethod}</span>
               </div>
             }
-            summary={summaryQuery.data}
-            summaryError={summaryQuery.error instanceof ApiError ? summaryQuery.error.message : null}
+            summary={summaryQuery.data ?? localSummary}
+            summaryError={summaryError}
             summaryLoading={summaryQuery.isPending}
+            showDiscountEligibilityWarning={Boolean(summaryQuery.data)}
           />
         </div>
       )}
@@ -669,6 +667,7 @@ function CheckoutSummaryCard({
   summaryLoading,
   summaryError,
   showDiscountInput = false,
+  showDiscountEligibilityWarning = false,
   codeInput = '',
   onCodeInputChange,
   onApplyCode,
@@ -680,6 +679,7 @@ function CheckoutSummaryCard({
   summaryLoading: boolean;
   summaryError: string | null;
   showDiscountInput?: boolean;
+  showDiscountEligibilityWarning?: boolean;
   codeInput?: string;
   onCodeInputChange?: (value: string) => void;
   onApplyCode?: () => void;
@@ -727,7 +727,7 @@ function CheckoutSummaryCard({
         </p>
       ) : null}
 
-      {summary?.appliedDiscountCode && !summary.hasDiscount ? (
+      {showDiscountEligibilityWarning && summary?.appliedDiscountCode && !summary.hasDiscount ? (
         <p className="mt-4 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Saved code <span className="font-semibold">{summary.appliedDiscountCode}</span> does not currently match an active eligible discount for this cart.
         </p>
@@ -820,8 +820,10 @@ function usePortalContact(token: string | null) {
 function useCheckoutSummary(token: string | null, enabled: boolean) {
   const items = useCartStore((state) => state.items);
   const discountCode = useCartStore((state) => state.discountCode);
+  const removeProducts = useCartStore((state) => state.removeProducts);
+  const [cartRecoveryMessage, setCartRecoveryMessage] = useState<string | null>(null);
 
-  return useQuery({
+  const query = useQuery({
     queryKey: [
       'portal-checkout-summary',
       discountCode,
@@ -848,6 +850,32 @@ function useCheckoutSummary(token: string | null, enabled: boolean) {
       }),
     enabled: enabled && items.length > 0
   });
+
+  useEffect(() => {
+    if (!(query.error instanceof ApiError) || query.error.code !== 'PRODUCT_NOT_FOUND') {
+      return;
+    }
+
+    const missingProductIds = extractMissingProductIds(query.error.details).filter((productId) =>
+      items.some((item) => item.productId === productId)
+    );
+
+    if (!missingProductIds.length) {
+      return;
+    }
+
+    removeProducts(missingProductIds);
+    setCartRecoveryMessage(
+      missingProductIds.length === 1
+        ? 'An unavailable product was removed from your cart. Totals are refreshing.'
+        : 'Unavailable products were removed from your cart. Totals are refreshing.'
+    );
+  }, [items, query.error, removeProducts]);
+
+  return {
+    ...query,
+    cartRecoveryMessage
+  };
 }
 
 function useSummaryItems(summary?: CheckoutSummary) {
@@ -863,8 +891,59 @@ function useSummaryItems(summary?: CheckoutSummary) {
   );
 }
 
+function buildLocalCheckoutSummary(items: CartItem[], appliedDiscountCode?: string | null): CheckoutSummary {
+  const subtotalAmount = cartSubtotal(items);
+
+  return {
+    items: items.map((item) => ({
+      productId: item.productId,
+      recurringPlanId: item.recurringPlanId,
+      variantId: item.variantId ?? null,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      discountAmount: 0,
+      taxAmount: 0,
+      lineTotal: item.unitPrice * item.quantity
+    })),
+    subtotalAmount,
+    discountAmount: 0,
+    taxAmount: 0,
+    totalAmount: subtotalAmount,
+    appliedDiscountCode: appliedDiscountCode?.trim().toUpperCase() || null,
+    hasDiscount: false
+  };
+}
+
+function resolveCheckoutSummaryError(
+  error: unknown,
+  summary?: CheckoutSummary
+) {
+  if (!(error instanceof ApiError)) {
+    return null;
+  }
+
+  if ((error.status === 401 || error.status === 403) && summary?.items.length) {
+    return null;
+  }
+
+  return error.message;
+}
+
 function cartItemKey(item: CartItem) {
   return checkoutSummaryKey(item.productId, item.recurringPlanId, item.variantId ?? null);
+}
+
+function extractMissingProductIds(details: unknown) {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    return [];
+  }
+
+  const missingProductIds = (details as { missingProductIds?: unknown }).missingProductIds;
+  if (!Array.isArray(missingProductIds)) {
+    return [];
+  }
+
+  return missingProductIds.filter((value): value is string => typeof value === 'string' && value.length > 0);
 }
 
 function checkoutSummaryKey(productId: string, recurringPlanId: string | null, variantId: string | null) {

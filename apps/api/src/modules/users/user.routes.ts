@@ -24,7 +24,7 @@ const userUpdateSchema = z.object({
 });
 
 const addressOrderBy: Prisma.AddressOrderByWithRelationInput[] = [{ isDefault: 'desc' }, { createdAt: 'asc' }];
-const activeSubscriptionStatuses: SubscriptionStatus[] = [SubscriptionStatus.in_progress, SubscriptionStatus.active];
+const activeSubscriptionStatuses: SubscriptionStatus[] = [SubscriptionStatus.active];
 
 const userInclude = {
   defaultContact: {

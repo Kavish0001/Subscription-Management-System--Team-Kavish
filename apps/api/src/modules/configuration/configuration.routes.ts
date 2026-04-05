@@ -7,9 +7,6 @@ import { requireAuth, requireRole } from '../../middleware/auth.js';
 
 export const configurationRouter = Router();
 
-configurationRouter.use(requireAuth);
-configurationRouter.use(requireRole('admin'));
-
 const recordIdSchema = z.string().uuid();
 
 const attributeValueSchema = z.object({
@@ -60,7 +57,7 @@ function parseId(value: unknown, label: string) {
   return parsed.data;
 }
 
-configurationRouter.get('/attributes', async (_request, response) => {
+configurationRouter.get('/attributes', requireAuth, requireRole('admin'), async (_request, response) => {
   const attributes = await prisma.productAttribute.findMany({
     include: {
       values: {
@@ -99,7 +96,7 @@ configurationRouter.get('/attributes', async (_request, response) => {
   });
 });
 
-configurationRouter.post('/attributes', async (request, response, next) => {
+configurationRouter.post('/attributes', requireAuth, requireRole('admin'), async (request, response, next) => {
   try {
     const payload = attributeSchema.parse(request.body);
 
@@ -212,7 +209,7 @@ configurationRouter.post('/attributes', async (request, response, next) => {
   }
 });
 
-configurationRouter.delete('/attributes/:id', async (request, response, next) => {
+configurationRouter.delete('/attributes/:id', requireAuth, requireRole('admin'), async (request, response, next) => {
   try {
     const id = parseId(request.params.id, 'Attribute');
     const existing = await prisma.productAttribute.findUnique({
@@ -247,7 +244,7 @@ configurationRouter.delete('/attributes/:id', async (request, response, next) =>
   }
 });
 
-configurationRouter.get('/quotation-templates', async (_request, response) => {
+configurationRouter.get('/quotation-templates', requireAuth, requireRole('admin'), async (_request, response) => {
   const templates = await prisma.quotationTemplate.findMany({
     include: {
       recurringPlan: true,
@@ -315,7 +312,7 @@ configurationRouter.get('/quotation-templates', async (_request, response) => {
   });
 });
 
-configurationRouter.post('/quotation-templates', async (request, response, next) => {
+configurationRouter.post('/quotation-templates', requireAuth, requireRole('admin'), async (request, response, next) => {
   try {
     const payload = quotationTemplateSchema.parse(request.body);
 
@@ -402,7 +399,7 @@ configurationRouter.post('/quotation-templates', async (request, response, next)
   }
 });
 
-configurationRouter.delete('/quotation-templates/:id', async (request, response, next) => {
+configurationRouter.delete('/quotation-templates/:id', requireAuth, requireRole('admin'), async (request, response, next) => {
   try {
     const id = parseId(request.params.id, 'Quotation template');
     const existing = await prisma.quotationTemplate.findUnique({
@@ -427,7 +424,7 @@ configurationRouter.delete('/quotation-templates/:id', async (request, response,
   }
 });
 
-configurationRouter.get('/payment-terms', async (_request, response) => {
+configurationRouter.get('/payment-terms', requireAuth, requireRole('admin'), async (_request, response) => {
   const paymentTerms = await prisma.paymentTerm.findMany({
     orderBy: [{ createdAt: 'desc' }]
   });
@@ -435,7 +432,7 @@ configurationRouter.get('/payment-terms', async (_request, response) => {
   response.json({ data: paymentTerms });
 });
 
-configurationRouter.post('/payment-terms', async (request, response, next) => {
+configurationRouter.post('/payment-terms', requireAuth, requireRole('admin'), async (request, response, next) => {
   try {
     const payload = paymentTermSchema.parse(request.body);
 
@@ -474,7 +471,7 @@ configurationRouter.post('/payment-terms', async (request, response, next) => {
   }
 });
 
-configurationRouter.delete('/payment-terms/:id', async (request, response, next) => {
+configurationRouter.delete('/payment-terms/:id', requireAuth, requireRole('admin'), async (request, response, next) => {
   try {
     const id = parseId(request.params.id, 'Payment term');
     const existing = await prisma.paymentTerm.findUnique({

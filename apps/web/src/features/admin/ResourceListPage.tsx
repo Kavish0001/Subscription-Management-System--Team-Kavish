@@ -840,7 +840,7 @@ export function ResourceListPage({
                             </button>
                           ) : null}
                           {!openInvoice &&
-                          ['confirmed', 'in_progress'].includes(subscription.status) &&
+                          ['confirmed', 'active'].includes(subscription.status) &&
                           invoiceDue ? (
                             <button
                               className="app-btn app-btn-primary px-3 py-1 text-xs"
@@ -856,7 +856,7 @@ export function ResourceListPage({
                               {latestInvoice?.status}
                             </span>
                           ) : null}
-                          {['confirmed', 'in_progress', 'closed'].includes(subscription.status) &&
+                          {['confirmed', 'active', 'closed'].includes(subscription.status) &&
                           subscription.recurringPlan?.isRenewable ? (
                             <button
                               className="app-btn app-btn-secondary px-3 py-1 text-xs"
@@ -868,7 +868,7 @@ export function ResourceListPage({
                               Renew
                             </button>
                           ) : null}
-                          {['confirmed', 'in_progress', 'closed'].includes(subscription.status) ? (
+                          {['confirmed', 'active', 'closed'].includes(subscription.status) ? (
                             <button
                               className="app-btn app-btn-secondary px-3 py-1 text-xs"
                               onClick={() =>
@@ -879,7 +879,7 @@ export function ResourceListPage({
                               Upsell
                             </button>
                           ) : null}
-                          {['confirmed', 'in_progress'].includes(subscription.status) &&
+                          {['confirmed', 'active'].includes(subscription.status) &&
                           subscription.recurringPlan?.isClosable ? (
                             <button
                               className="app-btn app-btn-secondary px-3 py-1 text-xs"
@@ -891,7 +891,7 @@ export function ResourceListPage({
                               Close
                             </button>
                           ) : null}
-                          {['confirmed', 'in_progress'].includes(subscription.status) &&
+                          {['confirmed', 'active'].includes(subscription.status) &&
                           subscription.recurringPlan?.isPausable ? (
                             <button
                               className="app-btn app-btn-secondary px-3 py-1 text-xs"
@@ -931,7 +931,10 @@ export function ResourceListPage({
                             'quotation',
                             'quotation_sent',
                             'confirmed',
-                            'in_progress',
+                            'active',
+                            'paused',
+                            'closed',
+                            'cancelled'
                           ].includes(subscription.status) ? (
                             <button
                               className="app-btn app-btn-secondary px-3 py-1 text-xs"

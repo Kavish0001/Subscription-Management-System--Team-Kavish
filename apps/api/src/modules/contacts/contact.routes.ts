@@ -8,7 +8,7 @@ import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middl
 
 export const contactsRouter = Router();
 const addressOrderBy: Prisma.AddressOrderByWithRelationInput[] = [{ isDefault: 'desc' }, { createdAt: 'asc' }];
-const activeSubscriptionStatuses: SubscriptionStatus[] = [SubscriptionStatus.in_progress, SubscriptionStatus.active];
+const activeSubscriptionStatuses: SubscriptionStatus[] = [SubscriptionStatus.active];
 
 const contactInputSchema = z.object({
   userId: z.string().uuid().optional(),
@@ -92,7 +92,14 @@ contactsRouter.get('/me', async (request, response, next) => {
 
     const user = await prisma.user.findUnique({
       where: { id: actorId },
-      select: { defaultContactId: true }
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        address: true,
+        defaultContactId: true
+      }
     });
 
     const contact = user?.defaultContactId
@@ -109,11 +116,36 @@ contactsRouter.get('/me', async (request, response, next) => {
           orderBy: addressOrderBy
         });
 
-    if (!contact) {
+    const resolvedContact =
+      contact ??
+      (user
+        ? await prisma.contact.create({
+            data: {
+              userId: user.id,
+              name: user.name?.trim() || user.email,
+              email: user.email,
+              phone: user.phone,
+              address: user.address,
+              isDefault: true
+            },
+            include: contactInclude
+          })
+        : null);
+
+    if (!resolvedContact) {
       throw new AppError('Contact not found', 404, 'CONTACT_NOT_FOUND');
     }
 
-    response.json({ data: mapContact(contact) });
+    if (user && !user.defaultContactId && resolvedContact.userId) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          defaultContactId: resolvedContact.id
+        }
+      });
+    }
+
+    response.json({ data: mapContact(resolvedContact) });
   } catch (error) {
     next(error);
   }

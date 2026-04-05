@@ -430,15 +430,21 @@ type ApiEnvelope<T> = {
 type ApiErrorEnvelope = {
   error?: {
     message?: string;
+    code?: string;
+    details?: unknown;
   };
 };
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
+  details?: unknown;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string, details?: unknown) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
 
@@ -477,8 +483,13 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
-    const errorMessage = payload && 'error' in payload ? payload.error?.message : undefined;
-    throw new ApiError(errorMessage ?? 'Request failed', response.status);
+    const errorPayload = payload && 'error' in payload ? payload.error : undefined;
+    throw new ApiError(
+      errorPayload?.message ?? 'Request failed',
+      response.status,
+      errorPayload?.code,
+      errorPayload?.details
+    );
   }
 
   return (payload as ApiEnvelope<T>).data;

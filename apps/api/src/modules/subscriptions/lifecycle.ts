@@ -8,41 +8,34 @@ export const editableSubscriptionStatuses = [
 
 export const followUpSubscriptionStatuses = [
   SubscriptionStatus.confirmed,
-  SubscriptionStatus.in_progress,
-  SubscriptionStatus.closed,
-  SubscriptionStatus.active
+  SubscriptionStatus.active,
+  SubscriptionStatus.closed
 ] as const;
 
 export const invoiceEligibleSubscriptionStatuses = [
   SubscriptionStatus.confirmed,
-  SubscriptionStatus.in_progress,
   SubscriptionStatus.active
 ] as const;
 
 export const closableSubscriptionStatuses = [
   SubscriptionStatus.confirmed,
-  SubscriptionStatus.in_progress,
   SubscriptionStatus.active
 ] as const;
 
 export const pausableSubscriptionStatuses = [
   SubscriptionStatus.confirmed,
-  SubscriptionStatus.in_progress,
   SubscriptionStatus.active
 ] as const;
 
 export const cancellableSubscriptionStatuses = [
   SubscriptionStatus.draft,
-  SubscriptionStatus.quotation,
   SubscriptionStatus.quotation_sent,
   SubscriptionStatus.confirmed,
-  SubscriptionStatus.in_progress,
   SubscriptionStatus.active
 ] as const;
 
 export const deletableSubscriptionStatuses = [
   SubscriptionStatus.draft,
-  SubscriptionStatus.quotation,
   SubscriptionStatus.quotation_sent
 ] as const;
 
@@ -52,12 +45,8 @@ export function defaultQuotationExpiry(from = new Date()) {
   return next;
 }
 
-export function normalizeSubscriptionStatus(status: SubscriptionStatus | string) {
-  return status === SubscriptionStatus.active ? SubscriptionStatus.in_progress : status;
-}
-
 export function isEditableSubscriptionStatus(status: SubscriptionStatus | string) {
-  return editableSubscriptionStatuses.includes(normalizeSubscriptionStatus(status) as (typeof editableSubscriptionStatuses)[number]);
+  return editableSubscriptionStatuses.includes(status as (typeof editableSubscriptionStatuses)[number]);
 }
 
 export function isFollowUpEligibleStatus(status: SubscriptionStatus | string) {
@@ -81,12 +70,11 @@ export function isCancellableSubscriptionStatus(status: SubscriptionStatus | str
 }
 
 export function isDeletableSubscriptionStatus(status: SubscriptionStatus | string) {
-  return deletableSubscriptionStatuses.includes(normalizeSubscriptionStatus(status) as (typeof deletableSubscriptionStatuses)[number]);
+  return deletableSubscriptionStatuses.includes(status as (typeof deletableSubscriptionStatuses)[number]);
 }
 
 export function shouldMoveToInProgress(subscription: Pick<SubscriptionOrder, 'status' | 'startDate'>, now = new Date()) {
-  const normalizedStatus = normalizeSubscriptionStatus(subscription.status);
-  return normalizedStatus === SubscriptionStatus.confirmed && Boolean(subscription.startDate && subscription.startDate <= now);
+  return subscription.status === SubscriptionStatus.confirmed && Boolean(subscription.startDate && subscription.startDate <= now);
 }
 
 export function addInterval(date: Date, count: number, unit: 'day' | 'week' | 'month' | 'year') {
@@ -142,14 +130,14 @@ export async function syncSubscriptionOperationalStatuses(
       expirationDate: null
     },
     data: {
-      status: SubscriptionStatus.in_progress
+      status: SubscriptionStatus.active
     }
   });
 
   await client.subscriptionOrder.updateMany({
     where: {
       status: {
-        in: [SubscriptionStatus.confirmed, SubscriptionStatus.in_progress, SubscriptionStatus.active, SubscriptionStatus.paused]
+        in: [SubscriptionStatus.confirmed, SubscriptionStatus.active, SubscriptionStatus.paused]
       },
       expirationDate: {
         lte: now
