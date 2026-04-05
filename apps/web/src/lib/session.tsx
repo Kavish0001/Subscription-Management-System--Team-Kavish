@@ -4,11 +4,12 @@ import {
   useEffect,
   useMemo,
   useState,
-  type PropsWithChildren
+  type PropsWithChildren,
 } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { ApiError, apiRequest, normalizeSessionUser, type SessionUser } from './api';
+import { activateGuestCart, activateUserCart, clearPendingSignupCartTransfer } from './cart';
 
 type SessionContextValue = {
   ready: boolean;
@@ -16,7 +17,11 @@ type SessionContextValue = {
   user: SessionUser | null;
   isAuthenticated: boolean;
   login: (input: { email: string; password: string }) => Promise<SessionUser>;
-  signup: (input: { name: string; email: string; password: string }) => Promise<{ message: string }>;
+  signup: (input: {
+    name: string;
+    email: string;
+    password: string;
+  }) => Promise<{ message: string }>;
   verifyOtp: (input: { email: string; otp: string }) => Promise<SessionUser>;
   resendOtp: (input: { email: string }) => Promise<{ message: string }>;
   logout: () => Promise<void>;
@@ -30,45 +35,59 @@ export function SessionProvider({ children }: Readonly<PropsWithChildren>) {
   const [user, setUser] = useState<SessionUser | null>(null);
 
   const clearSession = async () => {
-    setUser(null);
-
     try {
       await apiRequest('/auth/logout', {
-        method: 'POST'
+        method: 'POST',
       });
     } catch {
       // Local session should still be cleared if logout fails.
     }
+
+    clearPendingSignupCartTransfer();
+    await activateGuestCart({ clearGuestCart: true });
+    setUser(null);
   };
 
   const refreshSession = async () => {
     try {
       const me = await apiRequest<{
-        user: { userId: string; email: string; name: string | null; role: SessionUser['role'] } | null;
+        user: {
+          userId: string;
+          email: string;
+          name: string | null;
+          role: SessionUser['role'];
+        } | null;
         canRefresh: boolean;
       }>('/auth/me');
 
       if (me.user) {
-        setUser(normalizeSessionUser(me.user));
+        const nextUser = normalizeSessionUser(me.user);
+        await activateUserCart(nextUser.id);
+        setUser(nextUser);
         return;
       }
 
       if (!me.canRefresh) {
+        await activateGuestCart();
         setUser(null);
         return;
       }
 
       const refreshed = await apiRequest<{ user: SessionUser | null }>('/auth/refresh', {
-        method: 'POST'
+        method: 'POST',
       });
 
       if (refreshed.user) {
-        setUser(normalizeSessionUser(refreshed.user));
+        const nextUser = normalizeSessionUser(refreshed.user);
+        await activateUserCart(nextUser.id);
+        setUser(nextUser);
         return;
       }
 
+      await activateGuestCart();
       setUser(null);
     } catch (error) {
+      await activateGuestCart();
       setUser(null);
 
       if (error instanceof ApiError && error.status >= 500) {
@@ -92,37 +111,40 @@ export function SessionProvider({ children }: Readonly<PropsWithChildren>) {
       login: async (input) => {
         const result = await apiRequest<{ user: SessionUser }>('/auth/login', {
           method: 'POST',
-          body: JSON.stringify(input)
+          body: JSON.stringify(input),
         });
         const nextUser = normalizeSessionUser(result.user);
+        clearPendingSignupCartTransfer();
+        await activateUserCart(nextUser.id);
         setUser(nextUser);
         return nextUser;
       },
       signup: async (input) => {
         return apiRequest<{ message: string }>('/auth/signup', {
           method: 'POST',
-          body: JSON.stringify(input)
+          body: JSON.stringify(input),
         });
       },
       verifyOtp: async (input) => {
         const result = await apiRequest<{ user: SessionUser }>('/auth/verify-otp', {
           method: 'POST',
-          body: JSON.stringify(input)
+          body: JSON.stringify(input),
         });
         const nextUser = normalizeSessionUser(result.user);
+        await activateUserCart(nextUser.id, { transferPendingSignupCart: true });
         setUser(nextUser);
         return nextUser;
       },
       resendOtp: async (input) => {
         return apiRequest<{ message: string }>('/auth/resend-otp', {
           method: 'POST',
-          body: JSON.stringify(input)
+          body: JSON.stringify(input),
         });
       },
       logout: clearSession,
-      refreshSession
+      refreshSession,
     }),
-    [ready, user]
+    [ready, user],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -140,7 +162,7 @@ export function useSession() {
 
 export function RequireAuth({
   roles,
-  children
+  children,
 }: Readonly<PropsWithChildren<{ readonly roles?: SessionUser['role'][] }>>) {
   const location = useLocation();
   const session = useSession();

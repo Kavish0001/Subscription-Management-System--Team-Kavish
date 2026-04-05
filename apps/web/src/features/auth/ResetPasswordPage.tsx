@@ -1,21 +1,29 @@
 import { useMutation } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { AuthShell, MessageBanner } from '../../components/layout';
 import { ApiError, apiRequest } from '../../lib/api';
+import { useSession } from '../../lib/session';
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { isAuthenticated, user } = useSession();
   const token = searchParams.get('token') ?? '';
   const isResetMode = Boolean(token);
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(user?.email ?? '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!email && user?.email) {
+      setEmail(user.email);
+    }
+  }, [email, user?.email]);
 
   const requestMutation = useMutation({
     mutationFn: () =>
@@ -46,7 +54,7 @@ export function ResetPasswordPage() {
     onSuccess: (result) => {
       setError(null);
       setMessage(result.message);
-      window.setTimeout(() => navigate('/login'), 800);
+      window.setTimeout(() => navigate(isAuthenticated ? '/account/profile' : '/login'), 800);
     },
     onError: (mutationError) => {
       setMessage(null);
@@ -57,6 +65,8 @@ export function ResetPasswordPage() {
   const title = useMemo(() => (isResetMode ? 'Set new password' : 'Forgot password'), [isResetMode]);
   const hasExpiredLinkError = isResetMode && error === 'Reset link is invalid or expired';
   const isSubmitting = isResetMode ? confirmMutation.isPending : requestMutation.isPending;
+  const backTarget = isAuthenticated ? '/account/profile' : '/login';
+  const backLabel = isAuthenticated ? 'Back to account' : 'Back to login';
 
   return (
     <AuthShell
@@ -88,6 +98,8 @@ export function ResetPasswordPage() {
         )}
         {isResetMode ? (
           <p className="text-sm muted">Only the latest reset link works. If you requested a newer one, older links become invalid.</p>
+        ) : isAuthenticated ? (
+          <p className="text-sm muted">We will send the reset link to your current account email address.</p>
         ) : null}
         {message ? <MessageBanner tone="success">{message}</MessageBanner> : null}
         {error ? <MessageBanner tone="error">{error}</MessageBanner> : null}
@@ -117,9 +129,9 @@ export function ResetPasswordPage() {
           <Link
             aria-disabled={isSubmitting}
             className={`app-btn app-btn-secondary ${isSubmitting ? 'pointer-events-none opacity-60' : ''}`}
-            to="/login"
+            to={backTarget}
           >
-            Back to login
+            {backLabel}
           </Link>
         </div>
       </div>

@@ -62,10 +62,10 @@ export const router = createBrowserRouter([
     children: [
       { path: '/login', element: <LoginPage /> },
       { path: '/signup', element: <SignupPage /> },
-      { path: '/verify-otp', element: <VerifyOtpPage /> },
-      { path: '/reset-password', element: <ResetPasswordPage /> }
+      { path: '/verify-otp', element: <VerifyOtpPage /> }
     ]
   },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
   {
     path: '/admin',
     element: <RequireAuth roles={['admin', 'internal_user']} />,

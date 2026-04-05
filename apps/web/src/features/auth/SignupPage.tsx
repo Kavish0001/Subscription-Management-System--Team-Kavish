@@ -7,6 +7,7 @@ import { type z } from 'zod';
 
 import { AuthShell, MessageBanner } from '../../components/layout';
 import { ApiError } from '../../lib/api';
+import { finalizeGuestCartForSignup } from '../../lib/cart';
 import { useSession } from '../../lib/session';
 
 const schema = signupSchema;
@@ -22,8 +23,8 @@ export function SignupPage() {
     defaultValues: {
       email: '',
       name: '',
-      password: ''
-    }
+      password: '',
+    },
   });
 
   return (
@@ -43,14 +44,19 @@ export function SignupPage() {
                 return;
               }
               await signup(values);
+              finalizeGuestCartForSignup();
               navigate(`/verify-otp?email=${encodeURIComponent(values.email)}`);
             } catch (submissionError) {
-              setError(submissionError instanceof ApiError ? submissionError.message : 'Unable to create account');
+              setError(
+                submissionError instanceof ApiError
+                  ? submissionError.message
+                  : 'Unable to create account',
+              );
             }
           },
           () => {
             setError('Please fix the highlighted fields and try again.');
-          }
+          },
         )}
       >
         <div className="mb-1">
@@ -83,7 +89,12 @@ export function SignupPage() {
         </label>
         <label className="app-label">
           <span>Re-enter Password</span>
-          <input className="app-input" onChange={(event) => setConfirmPassword(event.target.value)} type="password" value={confirmPassword} />
+          <input
+            className="app-input"
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            type="password"
+            value={confirmPassword}
+          />
           {error === 'Passwords do not match' ? (
             <span className="app-error">Passwords do not match</span>
           ) : null}

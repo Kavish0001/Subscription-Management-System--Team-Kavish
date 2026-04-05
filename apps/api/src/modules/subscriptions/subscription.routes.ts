@@ -1,4 +1,4 @@
-import { InvoiceStatus, Prisma, SubscriptionStatus } from '@prisma/client';
+import { InvoiceStatus, SubscriptionStatus } from '@prisma/client';
 import { createSubscriptionSchema, paginationSchema } from '@subscription/shared';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -219,44 +219,29 @@ async function createLifecycleSubscription(input: {
     targetProductId = alternativeProduct.id;
   }
 
-  const lines = await Promise.all(
-    existing.lines.map(async (line, index) => {
-      const lineProductId =
-        input.relationType === 'upsell' && index === 0 ? targetProductId ?? line.productId : line.productId;
-      const product = await prisma.product.findUnique({
-        where: { id: lineProductId },
-        include: {
-          planPricing: true
-        }
-      });
+  const pricingLines = existing.lines.map((line, index) => {
+    const isUpsellReplacement = input.relationType === 'upsell' && index === 0;
 
-      if (!product) {
-        throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
-      }
+    return {
+      productId: isUpsellReplacement ? targetProductId ?? line.productId : line.productId,
+      variantId: isUpsellReplacement ? undefined : line.variantId ?? undefined,
+      quantity: line.quantity
+    };
+  });
 
-      const unitPrice =
-        Number(
-          product.planPricing.find((pricing) => pricing.recurringPlanId === targetPlanId)?.overridePrice ??
-            line.unitPrice
-        ) || Number(line.unitPrice);
-      const lineSubtotal = unitPrice * line.quantity;
+  if (targetPlan && pricingLines.some((line) => line.quantity < targetPlan.minimumQuantity)) {
+    throw new AppError(
+      `Subscription quantity must be at least ${targetPlan.minimumQuantity} for the selected recurring plan`,
+      409,
+      'MINIMUM_QUANTITY_NOT_MET'
+    );
+  }
 
-      return {
-        productId: product.id,
-        variantId: line.variantId,
-        productNameSnapshot: product.name,
-        quantity: line.quantity,
-        unitPrice: new Prisma.Decimal(unitPrice),
-        taxAmount: new Prisma.Decimal(lineSubtotal * 0.18),
-        lineTotal: new Prisma.Decimal(lineSubtotal * 1.18),
-        sortOrder: line.sortOrder
-      };
-    })
-  );
+  const pricing = await buildSubscriptionPricing(prisma, {
+    recurringPlanId: targetPlanId ?? null,
+    lines: pricingLines
+  });
 
-  const subtotal = lines.reduce((sum, line) => sum + Number(line.unitPrice) * line.quantity, 0);
-  const tax = subtotal * 0.18;
-  const total = subtotal + tax;
   const child = await prisma.subscriptionOrder.create({
     data: {
       subscriptionNumber: `SUB-${Date.now()}`,
@@ -275,15 +260,16 @@ async function createLifecycleSubscription(input: {
       nextInvoiceDate: null,
       paymentTermLabel: existing.paymentTermLabel,
       currencyCode: existing.currencyCode,
-      subtotalAmount: new Prisma.Decimal(subtotal),
-      taxAmount: new Prisma.Decimal(tax),
-      totalAmount: new Prisma.Decimal(total),
+      subtotalAmount: pricing.subtotalAmount,
+      discountAmount: pricing.discountAmount,
+      taxAmount: pricing.taxAmount,
+      totalAmount: pricing.totalAmount,
       notes:
         input.relationType === 'renewal'
           ? `Renewed from ${existing.subscriptionNumber}`
           : `Upsold from ${existing.subscriptionNumber}`,
       lines: {
-        create: lines
+        create: pricing.lines
       }
     },
     include: subscriptionInclude

@@ -1,4 +1,5 @@
 import {
+  portalCheckoutSchema,
   confirmPasswordResetSchema,
   createInternalUserSchema,
   createSubscriptionSchema,
@@ -54,5 +55,34 @@ describe('shared schemas', () => {
         lines: []
       })
     ).toThrowError();
+  });
+
+  it('normalizes optional alternate checkout address fields', () => {
+    const payload = portalCheckoutSchema.parse({
+      paymentMethod: 'upi',
+      checkoutAddress: {
+        line1: '  42 Market Street  ',
+        line2: '   ',
+        city: ' Ahmedabad ',
+        state: ' Gujarat ',
+        postalCode: '380001',
+        country: ' India '
+      },
+      lines: [
+        {
+          productId: '11111111-1111-1111-1111-111111111111',
+          quantity: 1
+        }
+      ]
+    });
+
+    expect(payload.checkoutAddress).toEqual({
+      line1: '42 Market Street',
+      line2: undefined,
+      city: 'Ahmedabad',
+      state: 'Gujarat',
+      postalCode: '380001',
+      country: 'India'
+    });
   });
 });

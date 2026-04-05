@@ -279,10 +279,29 @@ export const createSubscriptionSchema = z.object({
     .min(1),
 });
 
+const optionalCheckoutAddressLineSchema = z.preprocess((value) => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}, z.string().max(200).optional());
+
+export const checkoutAddressSchema = z.object({
+  line1: z.string().trim().min(1).max(200),
+  line2: optionalCheckoutAddressLineSchema,
+  city: z.string().trim().min(1).max(120),
+  state: z.string().trim().min(1).max(120),
+  postalCode: z.string().trim().min(1).max(20),
+  country: z.string().trim().min(1).max(120),
+});
+
 export const portalCheckoutSchema = z.object({
   paymentMethod: z.string().min(2).max(60),
   discountCode: z.string().max(50).optional(),
   notes: z.string().max(4000).optional(),
+  checkoutAddress: checkoutAddressSchema.optional(),
   lines: z
     .array(
       z.object({

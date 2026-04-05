@@ -153,7 +153,7 @@ export function Shell({
                           ? 'border-[color:rgba(5,150,105,0.24)] bg-[linear-gradient(135deg,#dff7eb,#f4fdf7)] shadow-[0_16px_32px_rgba(5,150,105,0.14)]'
                           : isExpandedOnly
                             ? 'border-[color:rgba(15,23,42,0.08)] bg-[color:rgba(255,255,255,0.58)]'
-                            : 'border-transparent bg-transparent opacity-42 hover:opacity-82',
+                            : 'border-transparent bg-transparent opacity-95 hover:bg-[color:rgba(255,255,255,0.58)] hover:opacity-100',
                       )}
                       onClick={() =>
                         setOpenMenu((value) => (value === item.label ? null : item.label))
@@ -169,7 +169,7 @@ export function Shell({
                                 ? 'bg-[linear-gradient(135deg,var(--color-primary),var(--color-primary-strong))] text-white shadow-[0_10px_20px_rgba(5,150,105,0.18)]'
                                 : isExpandedOnly
                                   ? 'bg-[color:rgba(255,255,255,0.88)] text-[color:var(--color-text-primary)]'
-                                  : 'bg-transparent text-[color:var(--color-text-muted)]',
+                                  : 'bg-transparent text-[color:rgba(51,65,85,0.98)]',
                             )}
                           >
                             <Icon className="h-[18px] w-[18px]" />
@@ -183,7 +183,7 @@ export function Shell({
                                 ? 'font-extrabold text-slate-950'
                                 : isExpandedOnly
                                   ? 'font-semibold text-[color:var(--color-text-primary)]'
-                                  : 'font-medium text-[color:rgba(2,6,23,0.34)]',
+                                  : 'font-medium text-[color:rgba(15,23,42,0.84)]',
                             )}
                           >
                             {item.label}
@@ -237,7 +237,7 @@ export function Shell({
                       'group rounded-[24px] border px-4 py-3 transition-all duration-150',
                       isActive
                         ? 'border-[color:rgba(5,150,105,0.24)] bg-[linear-gradient(135deg,#dff7eb,#f4fdf7)] shadow-[0_16px_32px_rgba(5,150,105,0.14)]'
-                        : 'border-transparent bg-transparent opacity-42 hover:opacity-82',
+                        : 'border-transparent bg-transparent opacity-95 hover:bg-[color:rgba(255,255,255,0.58)] hover:opacity-100',
                     )
                   }
                 >
@@ -249,7 +249,7 @@ export function Shell({
                             'grid h-11 w-11 shrink-0 place-items-center rounded-[18px] transition-colors',
                             isActive
                               ? 'bg-[linear-gradient(135deg,var(--color-primary),var(--color-primary-strong))] text-white shadow-[0_10px_20px_rgba(5,150,105,0.18)]'
-                              : 'bg-transparent text-[color:var(--color-text-muted)]',
+                              : 'bg-transparent text-[color:rgba(51,65,85,0.98)]',
                           )}
                         >
                           <Icon className="h-[18px] w-[18px]" />
@@ -261,7 +261,7 @@ export function Shell({
                             'truncate text-[15px] tracking-[-0.02em]',
                             isActive
                               ? 'font-extrabold text-slate-950'
-                              : 'font-medium text-[color:rgba(2,6,23,0.34)]',
+                              : 'font-medium text-[color:rgba(15,23,42,0.84)]',
                           )}
                         >
                           {item.label}

@@ -1,5 +1,5 @@
 import { InvoiceStatus, PaymentStatus, Prisma, SubscriptionStatus } from '@prisma/client';
-import { createInvoiceSchema, paginationSchema, portalCheckoutSchema, portalCheckoutSummarySchema } from '@subscription/shared';
+import { checkoutAddressSchema, createInvoiceSchema, paginationSchema, portalCheckoutSchema, portalCheckoutSummarySchema } from '@subscription/shared';
 import { Router, type Request } from 'express';
 import { z } from 'zod';
 
@@ -13,6 +13,7 @@ import { buildSubscriptionPricing } from '../subscriptions/pricing.js';
 
 export const billingRouter = Router();
 type InvoiceIdParams = { id: string };
+type DbClient = typeof prisma | Prisma.TransactionClient;
 
 function assertInvoiceAccess(
   auth: AuthenticatedRequest['auth'],
@@ -35,12 +36,66 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function toDecimalAmount(value: number) {
+  return new Prisma.Decimal(roundMoney(value));
+}
+
+const checkoutJobGroupSchema = z.object({
+  recurringPlan: z
+    .object({
+      id: z.string().uuid(),
+      intervalCount: z.number().int().min(1),
+      intervalUnit: z.enum(['day', 'week', 'month', 'year']),
+      autoCloseEnabled: z.boolean(),
+      autoCloseAfterCount: z.number().int().min(1).nullable(),
+      autoCloseAfterUnit: z.enum(['day', 'week', 'month', 'year']).nullable()
+    })
+    .nullable(),
+  appliedDiscountRuleId: z.string().uuid().nullable(),
+  subtotalAmount: z.number().nonnegative(),
+  discountAmount: z.number().nonnegative(),
+  taxAmount: z.number().nonnegative(),
+  totalAmount: z.number().nonnegative(),
+  lines: z
+    .array(
+      z.object({
+        productId: z.string().uuid(),
+        variantId: z.string().uuid().nullable(),
+        productNameSnapshot: z.string().min(1),
+        quantity: z.number().int().min(1),
+        unitPrice: z.number().nonnegative(),
+        discountAmount: z.number().nonnegative(),
+        taxAmount: z.number().nonnegative(),
+        lineTotal: z.number().nonnegative(),
+        sortOrder: z.number().int().min(0)
+      })
+    )
+    .min(1)
+});
+
+const checkoutJobResultSchema = z.object({
+  subscriptionIds: z.array(z.string().uuid()),
+  invoiceIds: z.array(z.string().uuid())
+});
+
+const checkoutJobPayloadSchema = z.object({
+  purpose: z.literal('checkout'),
+  userId: z.string().uuid(),
+  paymentMethod: z.string().min(2).max(60),
+  discountCode: z.string().max(50).nullable(),
+  notes: z.string().max(4000).nullable(),
+  checkoutAddress: checkoutAddressSchema.nullable().optional(),
+  groups: z.array(checkoutJobGroupSchema).min(1),
+  result: checkoutJobResultSchema.optional()
+});
+
 const razorpayOrderCreateSchema = z.discriminatedUnion('purpose', [
   z.object({
     purpose: z.literal('checkout'),
     paymentMethod: z.string().min(2).max(60),
     discountCode: z.string().max(50).optional(),
     notes: z.string().max(4000).optional(),
+    checkoutAddress: portalCheckoutSchema.shape.checkoutAddress,
     lines: portalCheckoutSchema.shape.lines
   }),
   z.object({
@@ -82,28 +137,109 @@ function paymentMetadataToObject(metadata: Prisma.JsonValue | null | undefined) 
   return metadata as Record<string, unknown>;
 }
 
-async function resolveCheckoutContact(auth: NonNullable<AuthenticatedRequest['auth']>) {
+function formatCheckoutAddress(input: z.infer<typeof checkoutAddressSchema>) {
+  return [
+    input.line1,
+    input.line2,
+    `${input.city}, ${input.state} ${input.postalCode}`,
+    input.country
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+function serializeCheckoutGroups(
+  groups: Array<{
+    recurringPlan: {
+      id: string;
+      intervalCount: number;
+      intervalUnit: 'day' | 'week' | 'month' | 'year';
+      autoCloseEnabled: boolean;
+      autoCloseAfterCount: number | null;
+      autoCloseAfterUnit: 'day' | 'week' | 'month' | 'year' | null;
+    } | null;
+    pricing: Awaited<ReturnType<typeof buildSubscriptionPricing>>;
+  }>
+) {
+  return groups.map((group) => ({
+    recurringPlan: group.recurringPlan
+      ? {
+          id: group.recurringPlan.id,
+          intervalCount: group.recurringPlan.intervalCount,
+          intervalUnit: group.recurringPlan.intervalUnit,
+          autoCloseEnabled: group.recurringPlan.autoCloseEnabled,
+          autoCloseAfterCount: group.recurringPlan.autoCloseAfterCount,
+          autoCloseAfterUnit: group.recurringPlan.autoCloseAfterUnit
+        }
+      : null,
+    appliedDiscountRuleId: group.pricing.appliedDiscountRuleId,
+    subtotalAmount: Number(group.pricing.subtotalAmount),
+    discountAmount: Number(group.pricing.discountAmount),
+    taxAmount: Number(group.pricing.taxAmount),
+    totalAmount: Number(group.pricing.totalAmount),
+    lines: group.pricing.lines.map((line) => ({
+      productId: line.productId,
+      variantId: line.variantId ?? null,
+      productNameSnapshot: line.productNameSnapshot,
+      quantity: line.quantity,
+      unitPrice: Number(line.unitPrice),
+      discountAmount: Number(line.discountAmount),
+      taxAmount: Number(line.taxAmount),
+      lineTotal: Number(line.lineTotal),
+      sortOrder: line.sortOrder
+    }))
+  }));
+}
+
+function parseCheckoutJobPayload(payload: Prisma.JsonValue | null | undefined) {
+  return checkoutJobPayloadSchema.parse(payload ?? {});
+}
+
+async function resolveCheckoutContact(
+  db: DbClient,
+  auth: NonNullable<AuthenticatedRequest['auth']>,
+  checkoutAddress?: z.infer<typeof checkoutAddressSchema>
+) {
   const contact =
-    (await prisma.contact.findFirst({
+    !checkoutAddress
+      ? (await db.contact.findFirst({
       where: {
         userId: auth.userId,
         isActive: true,
         isDefault: true
       }
     })) ??
-    (await prisma.contact.findFirst({
+    (await db.contact.findFirst({
       where: {
         userId: auth.userId,
         isActive: true
       },
       orderBy: [{ createdAt: 'asc' }]
-    }));
+    }))
+      : await db.contact.findFirst({
+          where: {
+            userId: auth.userId,
+            isActive: true,
+            addresses: {
+              some: {
+                type: 'billing',
+                line1: checkoutAddress.line1,
+                ...(checkoutAddress.line2 ? { line2: checkoutAddress.line2 } : {}),
+                city: checkoutAddress.city,
+                state: checkoutAddress.state,
+                postalCode: checkoutAddress.postalCode,
+                country: checkoutAddress.country
+              }
+            }
+          },
+          orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }]
+        });
 
   if (contact) {
     return contact;
   }
 
-  const user = await prisma.user.findUnique({
+  const user = await db.user.findUnique({
     where: { id: auth.userId },
     select: {
       id: true,
@@ -118,29 +254,57 @@ async function resolveCheckoutContact(auth: NonNullable<AuthenticatedRequest['au
     throw new AppError('User not found', 404, 'USER_NOT_FOUND');
   }
 
-  const created = await prisma.contact.create({
+  const created = await db.contact.create({
     data: {
       userId: user.id,
       name: user.name?.trim() || user.email,
       email: user.email,
       phone: user.phone,
-      address: user.address,
-      isDefault: true
+      address: checkoutAddress ? formatCheckoutAddress(checkoutAddress) : user.address,
+      isDefault: !checkoutAddress,
+      addresses: checkoutAddress
+        ? {
+            create: [
+              {
+                type: 'billing',
+                line1: checkoutAddress.line1,
+                line2: checkoutAddress.line2,
+                city: checkoutAddress.city,
+                state: checkoutAddress.state,
+                postalCode: checkoutAddress.postalCode,
+                country: checkoutAddress.country,
+                isDefault: true
+              },
+              {
+                type: 'shipping',
+                line1: checkoutAddress.line1,
+                line2: checkoutAddress.line2,
+                city: checkoutAddress.city,
+                state: checkoutAddress.state,
+                postalCode: checkoutAddress.postalCode,
+                country: checkoutAddress.country,
+                isDefault: true
+              }
+            ]
+          }
+        : undefined
     }
   });
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      defaultContactId: created.id
-    }
-  });
+  if (!checkoutAddress) {
+    await db.user.update({
+      where: { id: user.id },
+      data: {
+        defaultContactId: created.id
+      }
+    });
+  }
 
   return created;
 }
 
 async function sanitizeCheckoutLines(
-  db: typeof prisma,
+  db: DbClient,
   lines: Array<{
     productId: string;
     recurringPlanId?: string | null;
@@ -231,7 +395,7 @@ async function sanitizeCheckoutLines(
 }
 
 async function computePortalCheckoutPricing(
-  db: typeof prisma,
+  db: DbClient,
   payload: {
     discountCode?: string;
     lines: Array<{
@@ -343,7 +507,7 @@ async function computePortalCheckoutPricing(
 }
 
 async function buildPortalCheckoutSummary(
-  db: typeof prisma,
+  db: DbClient,
   payload: {
     discountCode?: string;
     lines: Array<{
@@ -357,6 +521,153 @@ async function buildPortalCheckoutSummary(
   const { pricedGroups: _pricedGroups, ...summary } = await computePortalCheckoutPricing(db, payload);
   void _pricedGroups;
   return summary;
+}
+
+async function createPortalCheckoutRecords(
+  tx: Prisma.TransactionClient,
+  input: {
+    auth: NonNullable<AuthenticatedRequest['auth']>;
+    contactId: string;
+    jobPayload: z.infer<typeof checkoutJobPayloadSchema>;
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
+    now: Date;
+  }
+) {
+  const subscriptionIds: string[] = [];
+  const invoiceIds: string[] = [];
+  const discountRuleIds = new Set<string>();
+
+  for (const [index, group] of input.jobPayload.groups.entries()) {
+    const subscription = await tx.subscriptionOrder.create({
+      data: {
+        subscriptionNumber: `SUB-${Date.now()}-${index + 1}`,
+        customerContactId: input.contactId,
+        salespersonUserId: input.auth.userId,
+        recurringPlanId: group.recurringPlan?.id ?? null,
+        sourceChannel: input.auth.role === 'portal_user' ? 'portal' : 'admin',
+        status: SubscriptionStatus.active,
+        quotationDate: input.now,
+        quotationExpiresAt: input.now,
+        confirmedAt: input.now,
+        startDate: input.now,
+        nextInvoiceDate: group.recurringPlan
+          ? nextInvoiceDateFromPlan(
+              input.now,
+              group.recurringPlan.intervalUnit,
+              group.recurringPlan.intervalCount
+            )
+          : null,
+        expirationDate: group.recurringPlan
+          ? resolveAutoCloseDate({
+              startDate: input.now,
+              autoCloseEnabled: group.recurringPlan.autoCloseEnabled,
+              autoCloseAfterCount: group.recurringPlan.autoCloseAfterCount,
+              autoCloseAfterUnit: group.recurringPlan.autoCloseAfterUnit
+            })
+          : null,
+        paymentTermLabel: 'Immediate payment',
+        subtotalAmount: toDecimalAmount(group.subtotalAmount),
+        discountAmount: toDecimalAmount(group.discountAmount),
+        taxAmount: toDecimalAmount(group.taxAmount),
+        totalAmount: toDecimalAmount(group.totalAmount),
+        notes: input.jobPayload.notes ?? undefined,
+        lines: {
+          create: group.lines.map((line) => ({
+            productId: line.productId,
+            variantId: line.variantId ?? undefined,
+            productNameSnapshot: line.productNameSnapshot,
+            quantity: line.quantity,
+            unitPrice: toDecimalAmount(line.unitPrice),
+            discountAmount: toDecimalAmount(line.discountAmount),
+            taxAmount: toDecimalAmount(line.taxAmount),
+            lineTotal: toDecimalAmount(line.lineTotal),
+            sortOrder: line.sortOrder
+          }))
+        }
+      },
+      include: {
+        lines: true
+      }
+    });
+
+    const invoice = await tx.invoice.create({
+      data: {
+        invoiceNumber: `INV-${Date.now()}-${index + 1}`,
+        subscriptionOrderId: subscription.id,
+        customerContactId: input.contactId,
+        status: InvoiceStatus.paid,
+        invoiceDate: input.now,
+        dueDate: input.now,
+        sourceLabel: 'Portal checkout',
+        paymentTermLabel: subscription.paymentTermLabel,
+        currencyCode: subscription.currencyCode,
+        subtotalAmount: subscription.subtotalAmount,
+        discountAmount: subscription.discountAmount,
+        taxAmount: subscription.taxAmount,
+        totalAmount: subscription.totalAmount,
+        paidAmount: subscription.totalAmount,
+        amountDue: new Prisma.Decimal(0),
+        paidAt: input.now,
+        lines: {
+          create: subscription.lines.map((line) => ({
+            subscriptionOrderLineId: line.id,
+            productNameSnapshot: line.productNameSnapshot,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            discountAmount: line.discountAmount,
+            taxAmount: line.taxAmount,
+            lineTotal: line.lineTotal,
+            sortOrder: line.sortOrder
+          }))
+        }
+      }
+    });
+
+    await tx.payment.create({
+      data: {
+        invoiceId: invoice.id,
+        paymentReference: `RZP-${input.razorpayPaymentId}-${index + 1}`,
+        paymentMethod: input.jobPayload.paymentMethod,
+        provider: 'razorpay',
+        status: PaymentStatus.succeeded,
+        amount: subscription.totalAmount,
+        currencyCode: subscription.currencyCode,
+        providerTransactionId: input.razorpayOrderId,
+        paidAt: input.now,
+        metadataJson: {
+          purpose: 'checkout',
+          razorpayOrderId: input.razorpayOrderId,
+          razorpayPaymentId: input.razorpayPaymentId,
+          razorpaySignature: input.razorpaySignature,
+          paymentMethod: input.jobPayload.paymentMethod,
+          appliedDiscountRuleId: group.appliedDiscountRuleId,
+          verifiedAt: input.now.toISOString()
+        }
+      }
+    });
+
+    if (group.appliedDiscountRuleId) {
+      discountRuleIds.add(group.appliedDiscountRuleId);
+    }
+
+    subscriptionIds.push(subscription.id);
+    invoiceIds.push(invoice.id);
+  }
+
+  for (const discountRuleId of discountRuleIds) {
+    await tx.discountRule.updateMany({
+      where: { id: discountRuleId },
+      data: {
+        usageCount: {
+          increment: 1
+        }
+      }
+    });
+  }
+
+  return { subscriptionIds, invoiceIds };
 }
 
 billingRouter.get('/invoices', requireAuth, async (request, response) => {
@@ -453,7 +764,6 @@ billingRouter.post('/payments/razorpay/order', requireAuth, async (request, resp
     const payload = razorpayOrderCreateSchema.parse(request.body);
 
     if (payload.purpose === 'checkout') {
-      const contact = await resolveCheckoutContact(auth);
       const pricedCheckout = await computePortalCheckoutPricing(prisma, {
         discountCode: payload.discountCode,
         lines: payload.lines
@@ -473,110 +783,26 @@ billingRouter.post('/payments/razorpay/order', requireAuth, async (request, resp
         }
       });
 
-      const created = await prisma.$transaction(
-        async (tx) => {
-          const subscriptionIds: string[] = [];
-          const invoiceIds: string[] = [];
+      const checkoutJobPayload = {
+        purpose: 'checkout' as const,
+        userId: auth.userId,
+        paymentMethod: payload.paymentMethod,
+        discountCode: payload.discountCode?.trim().toUpperCase() || null,
+        notes: payload.notes ?? null,
+        checkoutAddress: payload.checkoutAddress ?? null,
+        groups: serializeCheckoutGroups(pricedCheckout.pricedGroups)
+      };
 
-          for (const group of pricedCheckout.pricedGroups) {
-            const now = new Date();
-
-            const subscription = await tx.subscriptionOrder.create({
-              data: {
-                subscriptionNumber: `SUB-${Date.now()}-${subscriptionIds.length + 1}`,
-                customerContactId: contact.id,
-                salespersonUserId: auth.userId,
-                recurringPlanId: group.recurringPlan?.id,
-                sourceChannel: auth.role === 'portal_user' ? 'portal' : 'admin',
-                status: SubscriptionStatus.confirmed,
-                quotationDate: now,
-                quotationExpiresAt: now,
-                confirmedAt: now,
-                startDate: now,
-                nextInvoiceDate: now,
-                expirationDate: group.recurringPlan
-                  ? resolveAutoCloseDate({
-                      startDate: now,
-                      autoCloseEnabled: group.recurringPlan.autoCloseEnabled,
-                      autoCloseAfterCount: group.recurringPlan.autoCloseAfterCount,
-                      autoCloseAfterUnit: group.recurringPlan.autoCloseAfterUnit
-                    })
-                  : null,
-                paymentTermLabel: 'Immediate payment',
-                subtotalAmount: group.pricing.subtotalAmount,
-                discountAmount: group.pricing.discountAmount,
-                taxAmount: group.pricing.taxAmount,
-                totalAmount: group.pricing.totalAmount,
-                notes: payload.notes,
-                lines: {
-                  create: group.pricing.lines
-                }
-              },
-              include: {
-                lines: true
-              }
-            });
-
-            const invoice = await tx.invoice.create({
-              data: {
-                invoiceNumber: `INV-${Date.now()}-${invoiceIds.length + 1}`,
-                subscriptionOrderId: subscription.id,
-                customerContactId: contact.id,
-                status: InvoiceStatus.confirmed,
-                invoiceDate: now,
-                dueDate: now,
-                sourceLabel: 'Portal checkout',
-                paymentTermLabel: subscription.paymentTermLabel,
-                currencyCode: subscription.currencyCode,
-                subtotalAmount: subscription.subtotalAmount,
-                discountAmount: subscription.discountAmount,
-                taxAmount: subscription.taxAmount,
-                totalAmount: subscription.totalAmount,
-                amountDue: subscription.totalAmount,
-                lines: {
-                  create: subscription.lines.map((line) => ({
-                    subscriptionOrderLineId: line.id,
-                    productNameSnapshot: line.productNameSnapshot,
-                    quantity: line.quantity,
-                    unitPrice: line.unitPrice,
-                    discountAmount: line.discountAmount,
-                    taxAmount: line.taxAmount,
-                    lineTotal: line.lineTotal,
-                    sortOrder: line.sortOrder
-                  }))
-                }
-              }
-            });
-
-            await tx.payment.create({
-              data: {
-                invoiceId: invoice.id,
-                paymentReference: `RZP-PENDING-${Date.now()}-${invoiceIds.length + 1}`,
-                paymentMethod: payload.paymentMethod,
-                provider: 'razorpay',
-                status: PaymentStatus.pending,
-                amount: subscription.totalAmount,
-                currencyCode: subscription.currencyCode,
-                providerTransactionId: razorpayOrder.id,
-                metadataJson: {
-                  purpose: 'checkout',
-                  razorpayOrderId: razorpayOrder.id,
-                  paymentMethod: payload.paymentMethod,
-                  appliedDiscountRuleId: group.pricing.appliedDiscountRuleId
-                }
-              }
-            });
-
-            subscriptionIds.push(subscription.id);
-            invoiceIds.push(invoice.id);
-          }
-
-          return { subscriptionIds, invoiceIds };
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+      await prisma.job.create({
+        data: {
+          jobType: 'portal_checkout',
+          status: 'pending_payment',
+          referenceType: 'razorpay_order',
+          referenceId: razorpayOrder.id,
+          scheduledFor: new Date(),
+          payloadJson: checkoutJobPayload
         }
-      );
+      });
 
       return response.status(201).json({
         data: {
@@ -588,12 +814,12 @@ billingRouter.post('/payments/razorpay/order', requireAuth, async (request, resp
           merchantName: 'Veltrix',
           description: 'Subscription checkout',
           customer: {
-            name: contact.name,
-            email: contact.email,
-            contact: contact.phone
+            name: auth.email,
+            email: auth.email,
+            contact: null
           },
-          subscriptionIds: created.subscriptionIds,
-          invoiceIds: created.invoiceIds
+          subscriptionIds: [],
+          invoiceIds: []
         }
       });
     }
@@ -730,6 +956,103 @@ billingRouter.post('/payments/razorpay/verify', requireAuth, async (request, res
       })
     ) {
       throw new AppError('Invalid Razorpay payment signature', 400, 'RAZORPAY_SIGNATURE_INVALID');
+    }
+
+    if (payload.purpose === 'checkout') {
+      const checkoutJob = await prisma.job.findFirst({
+        where: {
+          jobType: 'portal_checkout',
+          referenceType: 'razorpay_order',
+          referenceId: payload.razorpayOrderId
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      if (!checkoutJob) {
+        throw new AppError('Portal checkout session not found', 404, 'CHECKOUT_NOT_FOUND');
+      }
+
+      const checkoutPayload = parseCheckoutJobPayload(checkoutJob.payloadJson);
+
+      if (checkoutPayload.userId !== auth.userId) {
+        throw new AppError('You do not have permission to access this checkout', 403);
+      }
+
+      if (checkoutJob.status === 'completed') {
+        if (!checkoutPayload.result) {
+          throw new AppError('Checkout result is unavailable', 500, 'CHECKOUT_RESULT_MISSING');
+        }
+
+        return response.json({ data: checkoutPayload.result });
+      }
+
+      const now = new Date();
+      const result = await prisma.$transaction(
+        async (tx) => {
+          const claimedCheckout = await tx.job.updateMany({
+            where: {
+              id: checkoutJob.id,
+              status: 'pending_payment'
+            },
+            data: {
+              status: 'processing'
+            }
+          });
+
+          if (claimedCheckout.count === 0) {
+            const currentCheckout = await tx.job.findUnique({
+              where: { id: checkoutJob.id }
+            });
+
+            if (!currentCheckout) {
+              throw new AppError('Portal checkout session not found', 404, 'CHECKOUT_NOT_FOUND');
+            }
+
+            const currentPayload = parseCheckoutJobPayload(currentCheckout.payloadJson);
+            if (currentCheckout.status === 'completed' && currentPayload.result) {
+              return currentPayload.result;
+            }
+
+            throw new AppError('Checkout is already being processed', 409, 'CHECKOUT_PROCESSING');
+          }
+
+          const contact = await resolveCheckoutContact(
+            tx,
+            auth,
+            checkoutPayload.checkoutAddress ?? undefined
+          );
+          const createdRecords = await createPortalCheckoutRecords(tx, {
+            auth,
+            contactId: contact.id,
+            jobPayload: checkoutPayload,
+            razorpayOrderId: payload.razorpayOrderId,
+            razorpayPaymentId: payload.razorpayPaymentId,
+            razorpaySignature: payload.razorpaySignature,
+            now
+          });
+
+          await tx.job.update({
+            where: { id: checkoutJob.id },
+            data: {
+              status: 'completed',
+              processedAt: now,
+              payloadJson: {
+                ...checkoutPayload,
+                result: createdRecords
+              }
+            }
+          });
+
+          return createdRecords;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+        }
+      );
+
+      return response.status(201).json({ data: result });
     }
 
     const existingPayments = await prisma.payment.findMany({

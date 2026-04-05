@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PrinterIcon } from '../../components/icons';
+import { getPrimaryAddress } from '../../lib/address';
 import {
   apiRequest,
   ApiError,
@@ -13,7 +14,7 @@ import {
   type Invoice,
   type RazorpayOrder,
   type RazorpayVerificationResult,
-  type Subscription
+  type Subscription,
 } from '../../lib/api';
 import { cartSubtotal, useCartStore, type CartItem } from '../../lib/cart';
 import { openRazorpayCheckout } from '../../lib/razorpay';
@@ -22,7 +23,8 @@ import { useSession } from '../../lib/session';
 const checkoutAddressKey = 'veltrix-checkout-address';
 const fieldClass =
   'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100';
-const panelClass = 'rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]';
+const panelClass =
+  'rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]';
 const checkoutSteps = ['order', 'address', 'payment'] as const;
 
 type CheckoutStep = (typeof checkoutSteps)[number];
@@ -50,10 +52,12 @@ export function CartPage() {
   const summaryItems = useSummaryItems(summaryQuery.data);
   const localSummary = useMemo(
     () => buildLocalCheckoutSummary(items, discountCode || null),
-    [discountCode, items]
+    [discountCode, items],
   );
   const displayedSummary = summaryQuery.data ?? localSummary;
-  const summaryError = summaryQuery.cartRecoveryMessage ?? resolveCheckoutSummaryError(summaryQuery.error, displayedSummary);
+  const summaryError =
+    summaryQuery.cartRecoveryMessage ??
+    resolveCheckoutSummaryError(summaryQuery.error, displayedSummary);
 
   return (
     <CheckoutShell
@@ -63,7 +67,9 @@ export function CartPage() {
     >
       {items.length === 0 ? (
         <section className={panelClass}>
-          <h2 className="text-2xl font-bold tracking-[-0.04em] text-slate-950">Your cart is empty</h2>
+          <h2 className="text-2xl font-bold tracking-[-0.04em] text-slate-950">
+            Your cart is empty
+          </h2>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
             Add a subscription product from the shop to start the external customer checkout flow.
           </p>
@@ -87,12 +93,19 @@ export function CartPage() {
                     <div className="flex min-w-0 gap-4">
                       <ProductThumb imageUrl={item.imageUrl} name={item.name} />
                       <div className="min-w-0">
-                        <p className="text-lg font-semibold tracking-[-0.03em] text-slate-950">{item.name}</p>
+                        <p className="text-lg font-semibold tracking-[-0.03em] text-slate-950">
+                          {item.name}
+                        </p>
                         <p className="mt-1 text-sm text-slate-500">{item.recurringPlanName}</p>
-                        {item.variantName ? <p className="mt-1 text-sm text-slate-500">{item.variantName}</p> : null}
-                        <p className="mt-3 text-sm font-medium text-slate-700">{formatCurrency(item.unitPrice)} each</p>
+                        {item.variantName ? (
+                          <p className="mt-1 text-sm text-slate-500">{item.variantName}</p>
+                        ) : null}
+                        <p className="mt-3 text-sm font-medium text-slate-700">
+                          {formatCurrency(item.unitPrice)} each
+                        </p>
                         <p className="mt-1 text-sm text-slate-500">
-                          Line total: {formatCurrency(pricedLine?.lineTotal ?? item.unitPrice * item.quantity)}
+                          Line total:{' '}
+                          {formatCurrency(pricedLine?.lineTotal ?? item.unitPrice * item.quantity)}
                         </p>
                       </div>
                     </div>
@@ -100,13 +113,20 @@ export function CartPage() {
                     <div className="flex flex-wrap items-center gap-3">
                       <QuantityStepper
                         onChange={(nextQuantity) =>
-                          updateQuantity(item.productId, item.recurringPlanId, nextQuantity, item.variantId ?? null)
+                          updateQuantity(
+                            item.productId,
+                            item.recurringPlanId,
+                            nextQuantity,
+                            item.variantId ?? null,
+                          )
                         }
                         value={item.quantity}
                       />
                       <button
                         className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
-                        onClick={() => removeItem(item.productId, item.recurringPlanId, item.variantId ?? null)}
+                        onClick={() =>
+                          removeItem(item.productId, item.recurringPlanId, item.variantId ?? null)
+                        }
                         type="button"
                       >
                         Remove
@@ -153,7 +173,8 @@ export function CartPage() {
             detail={
               !isAuthenticated ? (
                 <div className="rounded-[22px] border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
-                  Guest cart is available. Sign in before checkout to calculate taxes, validate discounts, and place the order.
+                  Guest cart is available. Sign in before checkout to calculate taxes, validate
+                  discounts, and place the order.
                 </div>
               ) : undefined
             }
@@ -170,30 +191,67 @@ export function CartPage() {
 }
 
 export function CheckoutAddressPage() {
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { isAuthenticated, token } = useSession();
   const items = useCartStore((state) => state.items);
   const discountCode = useCartStore((state) => state.discountCode);
   const [useAlternateAddress, setUseAlternateAddress] = useState(false);
+  const [saveAddressToProfile, setSaveAddressToProfile] = useState(false);
   const [addressError, setAddressError] = useState<string | null>(null);
-  const [alternateAddress, setAlternateAddress] = useState<CheckoutAddress>({
-    line1: '',
-    line2: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: 'India'
-  });
+  const [alternateAddress, setAlternateAddress] = useState<CheckoutAddress>(
+    createEmptyCheckoutAddress(),
+  );
   const contactQuery = usePortalContact(token);
   const summaryQuery = useCheckoutSummary(token, isAuthenticated);
   const localSummary = useMemo(
     () => buildLocalCheckoutSummary(items, discountCode || null),
-    [discountCode, items]
+    [discountCode, items],
   );
-  const summaryError = summaryQuery.cartRecoveryMessage ?? resolveCheckoutSummaryError(summaryQuery.error, summaryQuery.data ?? localSummary);
+  const summaryError =
+    summaryQuery.cartRecoveryMessage ??
+    resolveCheckoutSummaryError(summaryQuery.error, summaryQuery.data ?? localSummary);
+  const defaultAddress = getPrimaryAddress(contactQuery.data?.addresses);
+  const shouldCollectAlternateAddress =
+    useAlternateAddress || (!contactQuery.isPending && !defaultAddress);
+  const shouldSaveAlternateAddress = shouldCollectAlternateAddress && saveAddressToProfile;
 
-  const defaultAddress =
-    contactQuery.data?.addresses.find((address) => address.isDefault) ?? contactQuery.data?.addresses[0];
+  useEffect(() => {
+    window.sessionStorage.removeItem(checkoutAddressKey);
+  }, []);
+
+  const saveAddressMutation = useMutation({
+    mutationFn: async (address: CheckoutAddress) => {
+      if (!contactQuery.data) {
+        throw new ApiError('Profile contact is still loading. Please try again.', 409);
+      }
+
+      return apiRequest<Contact>(`/contacts/${contactQuery.data.id}`, {
+        token,
+        method: 'PATCH',
+        body: JSON.stringify({
+          addresses: [
+            {
+              type: 'billing',
+              line1: address.line1,
+              line2: address.line2 || undefined,
+              city: address.city,
+              state: address.state,
+              postalCode: address.postalCode,
+              country: address.country,
+              isDefault: true,
+            },
+          ],
+        }),
+      });
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['portal-contact'] }),
+        queryClient.invalidateQueries({ queryKey: ['profile-contact'] }),
+      ]);
+    },
+  });
 
   return (
     <CheckoutShell
@@ -204,7 +262,10 @@ export function CheckoutAddressPage() {
       {items.length === 0 ? (
         <section className={panelClass}>
           <p className="text-sm text-slate-600">Cart is empty. Return to the order step first.</p>
-          <Link className="mt-4 inline-flex rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700" to="/cart">
+          <Link
+            className="mt-4 inline-flex rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700"
+            to="/cart"
+          >
             Back to cart
           </Link>
         </section>
@@ -214,8 +275,12 @@ export function CheckoutAddressPage() {
             <section className={panelClass}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Default address</p>
-                  <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-slate-950">Profile address</h2>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
+                    Default address
+                  </p>
+                  <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-slate-950">
+                    Profile address
+                  </h2>
                 </div>
                 {contactQuery.data?.companyName ? (
                   <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -224,66 +289,114 @@ export function CheckoutAddressPage() {
                 ) : null}
               </div>
 
-              {defaultAddress ? (
+              {contactQuery.isPending ? (
+                <p className="mt-4 text-sm text-slate-500">Loading your profile address...</p>
+              ) : defaultAddress ? (
                 <div className="mt-4">
                   <AddressPreview address={defaultAddress} />
                 </div>
               ) : (
-                <p className="mt-4 text-sm text-slate-500">No default address was found on the profile yet.</p>
+                <p className="mt-4 text-sm text-slate-500">
+                  No default profile address is set yet. Add a delivery address below to continue.
+                </p>
               )}
 
-              <label className="mt-5 inline-flex items-center gap-3 text-sm font-medium text-slate-700">
-                <input
-                  checked={useAlternateAddress}
-                  className="h-4 w-4 accent-emerald-600"
-                  onChange={(event) => setUseAlternateAddress(event.target.checked)}
-                  type="checkbox"
-                />
-                Use a different address for this checkout
-              </label>
+              {defaultAddress ? (
+                <label className="mt-5 inline-flex items-center gap-3 text-sm font-medium text-slate-700">
+                  <input
+                    checked={useAlternateAddress}
+                    className="h-4 w-4 accent-emerald-600"
+                    onChange={(event) => {
+                      setUseAlternateAddress(event.target.checked);
+                      setAddressError(null);
+                    }}
+                    type="checkbox"
+                  />
+                  Send these products to a different address
+                </label>
+              ) : null}
             </section>
 
-            {useAlternateAddress ? (
+            {shouldCollectAlternateAddress ? (
               <section className={panelClass}>
-                <h3 className="text-xl font-semibold tracking-[-0.03em] text-slate-950">Alternate address</h3>
+                <h3 className="text-xl font-semibold tracking-[-0.03em] text-slate-950">
+                  {defaultAddress ? 'Different delivery address' : 'Delivery address'}
+                </h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  {defaultAddress
+                    ? 'This address will be used for this checkout only unless you choose to update your profile.'
+                    : 'Enter the address for this order. You can also save it as your profile default.'}
+                </p>
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <input
                     className={`${fieldClass} md:col-span-2`}
-                    onChange={(event) => setAlternateAddress((value) => ({ ...value, line1: event.target.value }))}
+                    onChange={(event) => {
+                      setAlternateAddress((value) => ({ ...value, line1: event.target.value }));
+                      setAddressError(null);
+                    }}
                     placeholder="Address line 1"
                     value={alternateAddress.line1}
                   />
                   <input
                     className={`${fieldClass} md:col-span-2`}
-                    onChange={(event) => setAlternateAddress((value) => ({ ...value, line2: event.target.value }))}
+                    onChange={(event) => {
+                      setAlternateAddress((value) => ({ ...value, line2: event.target.value }));
+                      setAddressError(null);
+                    }}
                     placeholder="Address line 2"
                     value={alternateAddress.line2 ?? ''}
                   />
                   <input
                     className={fieldClass}
-                    onChange={(event) => setAlternateAddress((value) => ({ ...value, city: event.target.value }))}
+                    onChange={(event) => {
+                      setAlternateAddress((value) => ({ ...value, city: event.target.value }));
+                      setAddressError(null);
+                    }}
                     placeholder="City"
                     value={alternateAddress.city}
                   />
                   <input
                     className={fieldClass}
-                    onChange={(event) => setAlternateAddress((value) => ({ ...value, state: event.target.value }))}
+                    onChange={(event) => {
+                      setAlternateAddress((value) => ({ ...value, state: event.target.value }));
+                      setAddressError(null);
+                    }}
                     placeholder="State"
                     value={alternateAddress.state}
                   />
                   <input
                     className={fieldClass}
-                    onChange={(event) => setAlternateAddress((value) => ({ ...value, postalCode: event.target.value }))}
+                    onChange={(event) => {
+                      setAlternateAddress((value) => ({
+                        ...value,
+                        postalCode: event.target.value,
+                      }));
+                      setAddressError(null);
+                    }}
                     placeholder="Postal code"
                     value={alternateAddress.postalCode}
                   />
                   <input
                     className={fieldClass}
-                    onChange={(event) => setAlternateAddress((value) => ({ ...value, country: event.target.value }))}
+                    onChange={(event) => {
+                      setAlternateAddress((value) => ({ ...value, country: event.target.value }));
+                      setAddressError(null);
+                    }}
                     placeholder="Country"
                     value={alternateAddress.country}
                   />
                 </div>
+                <label className="mt-5 inline-flex items-center gap-3 text-sm font-medium text-slate-700">
+                  <input
+                    checked={saveAddressToProfile}
+                    className="h-4 w-4 accent-emerald-600"
+                    onChange={(event) => setSaveAddressToProfile(event.target.checked)}
+                    type="checkbox"
+                  />
+                  {defaultAddress
+                    ? 'Update my profile default address with this address'
+                    : 'Add this address as my default profile address'}
+                </label>
               </section>
             ) : null}
 
@@ -298,28 +411,55 @@ export function CheckoutAddressPage() {
             actions={
               <button
                 className="inline-flex w-full items-center justify-center rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
-                onClick={() => {
-                  const chosenAddress = useAlternateAddress ? alternateAddress : defaultAddress;
+                disabled={saveAddressMutation.isPending || contactQuery.isPending}
+                onClick={async () => {
+                  const chosenAddress = normalizeCheckoutAddress(
+                    shouldCollectAlternateAddress ? alternateAddress : defaultAddress,
+                  );
 
-                  if (!chosenAddress?.line1 || !chosenAddress.city || !chosenAddress.state || !chosenAddress.postalCode) {
+                  if (!isCheckoutAddressComplete(chosenAddress)) {
                     setAddressError('Complete the selected address before continuing to payment.');
                     return;
                   }
 
-                  window.sessionStorage.setItem(checkoutAddressKey, JSON.stringify(chosenAddress));
-                  setAddressError(null);
-                  navigate('/checkout/payment');
+                  try {
+                    if (shouldSaveAlternateAddress) {
+                      await saveAddressMutation.mutateAsync(chosenAddress);
+                    }
+
+                    if (shouldCollectAlternateAddress) {
+                      window.sessionStorage.setItem(
+                        checkoutAddressKey,
+                        JSON.stringify(chosenAddress),
+                      );
+                    } else {
+                      window.sessionStorage.removeItem(checkoutAddressKey);
+                    }
+
+                    setAddressError(null);
+                    navigate('/checkout/payment');
+                  } catch (mutationError) {
+                    setAddressError(
+                      mutationError instanceof ApiError || mutationError instanceof Error
+                        ? mutationError.message
+                        : 'Unable to save the address right now.',
+                    );
+                  }
                 }}
                 type="button"
               >
-                Continue to payment
+                {saveAddressMutation.isPending ? 'Saving address...' : 'Continue to payment'}
               </button>
             }
             detail={
               <div className="rounded-[22px] border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
-                {useAlternateAddress
-                  ? 'Alternate address will be used for this checkout.'
-                  : 'The saved profile address is selected by default.'}
+                {contactQuery.isPending
+                  ? 'Checking your saved profile address.'
+                  : !defaultAddress
+                    ? 'A delivery address is required before you can continue.'
+                    : useAlternateAddress
+                      ? 'The alternate address will be used for this checkout.'
+                      : 'The saved profile default address is selected for this order.'}
               </div>
             }
             summary={summaryQuery.data ?? localSummary}
@@ -343,11 +483,15 @@ export function CheckoutPaymentPage() {
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'upi' | 'netbanking'>('card');
   const [error, setError] = useState<string | null>(null);
   const summaryQuery = useCheckoutSummary(token, isAuthenticated);
+  const contactQuery = usePortalContact(token);
   const localSummary = useMemo(
     () => buildLocalCheckoutSummary(items, discountCode || null),
-    [discountCode, items]
+    [discountCode, items],
   );
-  const summaryError = summaryQuery.cartRecoveryMessage ?? resolveCheckoutSummaryError(summaryQuery.error, summaryQuery.data ?? localSummary);
+  const summaryError =
+    summaryQuery.cartRecoveryMessage ??
+    resolveCheckoutSummaryError(summaryQuery.error, summaryQuery.data ?? localSummary);
+  const defaultAddress = getPrimaryAddress(contactQuery.data?.addresses);
 
   const paymentMutation = useMutation({
     mutationFn: async () => {
@@ -360,8 +504,9 @@ export function CheckoutPaymentPage() {
           purpose: 'checkout',
           paymentMethod,
           discountCode: discountCode || undefined,
-          lines
-        })
+          checkoutAddress: readStoredCheckoutAddress() ?? undefined,
+          lines,
+        }),
       });
 
       const razorpayPayment = await openRazorpayCheckout({
@@ -371,7 +516,7 @@ export function CheckoutPaymentPage() {
         currency: order.currency,
         merchantName: order.merchantName,
         description: order.description,
-        customer: order.customer
+        customer: order.customer,
       });
 
       return apiRequest<RazorpayVerificationResult>('/payments/razorpay/verify', {
@@ -381,24 +526,29 @@ export function CheckoutPaymentPage() {
           purpose: 'checkout',
           razorpayOrderId: razorpayPayment.razorpay_order_id,
           razorpayPaymentId: razorpayPayment.razorpay_payment_id,
-          razorpaySignature: razorpayPayment.razorpay_signature
-        })
+          razorpaySignature: razorpayPayment.razorpay_signature,
+        }),
       });
     },
     onSuccess: async (result) => {
       clearCart();
+      window.sessionStorage.removeItem(checkoutAddressKey);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['portal-orders'] }),
         queryClient.invalidateQueries({ queryKey: ['profile-orders'] }),
-        queryClient.invalidateQueries({ queryKey: ['portal-invoice'] })
+        queryClient.invalidateQueries({ queryKey: ['portal-invoice'] }),
       ]);
-      navigate(`/checkout/success?subscriptions=${result.subscriptionIds.join(',')}&invoices=${result.invoiceIds.join(',')}`);
+      navigate(
+        `/checkout/success?subscriptions=${result.subscriptionIds.join(',')}&invoices=${result.invoiceIds.join(',')}`,
+      );
     },
     onError: (mutationError) => {
       setError(
-        mutationError instanceof ApiError || mutationError instanceof Error ? mutationError.message : 'Payment failed'
+        mutationError instanceof ApiError || mutationError instanceof Error
+          ? mutationError.message
+          : 'Payment failed',
       );
-    }
+    },
   });
 
   return (
@@ -410,7 +560,10 @@ export function CheckoutPaymentPage() {
       {items.length === 0 ? (
         <section className={panelClass}>
           <p className="text-sm text-slate-600">Cart is empty. Return to the order step first.</p>
-          <Link className="mt-4 inline-flex rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700" to="/cart">
+          <Link
+            className="mt-4 inline-flex rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700"
+            to="/cart"
+          >
             Back to cart
           </Link>
         </section>
@@ -418,17 +571,22 @@ export function CheckoutPaymentPage() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid gap-4">
             <section className={panelClass}>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Payment gateway</p>
-              <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-slate-950">Choose payment method</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
+                Payment gateway
+              </p>
+              <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-slate-950">
+                Choose payment method
+              </h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Razorpay test checkout opens in the next step and records the payment against the generated subscription invoice.
+                Razorpay test checkout opens in the next step and records the payment against the
+                generated subscription invoice.
               </p>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 {[
                   { id: 'card', label: 'Card' },
                   { id: 'upi', label: 'UPI' },
-                  { id: 'netbanking', label: 'Net Banking' }
+                  { id: 'netbanking', label: 'Net Banking' },
                 ].map((option) => (
                   <button
                     className={`rounded-[24px] border px-4 py-4 text-left transition ${
@@ -448,14 +606,21 @@ export function CheckoutPaymentPage() {
             </section>
 
             <section className={panelClass}>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Delivery and invoice address</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
+                Delivery and invoice address
+              </p>
               <div className="mt-4">
-                <AddressBlock />
+                <AddressBlock
+                  address={readStoredCheckoutAddress() ?? defaultAddress}
+                  isLoading={contactQuery.isPending}
+                />
               </div>
             </section>
 
             {error ? (
-              <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>
+              <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {error}
+              </p>
             ) : null}
           </div>
 
@@ -463,7 +628,9 @@ export function CheckoutPaymentPage() {
             actions={
               <button
                 className="inline-flex w-full items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={paymentMutation.isPending || summaryQuery.isPending || Boolean(summaryQuery.error)}
+                disabled={
+                  paymentMutation.isPending || summaryQuery.isPending || Boolean(summaryQuery.error)
+                }
                 onClick={() => paymentMutation.mutate()}
                 type="button"
               >
@@ -472,7 +639,8 @@ export function CheckoutPaymentPage() {
             }
             detail={
               <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                Selected method: <span className="font-semibold text-slate-950">{paymentMethod}</span>
+                Selected method:{' '}
+                <span className="font-semibold text-slate-950">{paymentMethod}</span>
               </div>
             }
             summary={summaryQuery.data ?? localSummary}
@@ -497,13 +665,13 @@ export function CheckoutSuccessPage() {
   const subscriptionQuery = useQuery({
     queryKey: ['checkout-success-subscription', primarySubscriptionId],
     queryFn: () => apiRequest<Subscription>(`/subscriptions/${primarySubscriptionId}`, { token }),
-    enabled: Boolean(primarySubscriptionId)
+    enabled: Boolean(primarySubscriptionId),
   });
 
   const invoiceQuery = useQuery({
     queryKey: ['checkout-success-invoice', primaryInvoiceId],
     queryFn: () => apiRequest<Invoice>(`/invoices/${primaryInvoiceId}`, { token }),
-    enabled: Boolean(primaryInvoiceId)
+    enabled: Boolean(primaryInvoiceId),
   });
 
   const order = subscriptionQuery.data;
@@ -516,12 +684,15 @@ export function CheckoutSuccessPage() {
           <div>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Order complete</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">
+                  Order complete
+                </p>
                 <h1 className="mt-3 text-3xl font-black tracking-[-0.05em] text-slate-950 sm:text-4xl">
                   Thanks for your order
                 </h1>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Payment has been processed and the subscription order is now available inside the external customer portal.
+                  Payment has been processed and the subscription order is now available inside the
+                  external customer portal.
                 </p>
                 <p className="mt-4 text-lg font-semibold text-slate-950">
                   {order?.subscriptionNumber ?? 'Order created'}
@@ -545,7 +716,8 @@ export function CheckoutSuccessPage() {
               >
                 <p className="font-semibold">Your payment has been processed</p>
                 <p className="mt-1">
-                  Open {order?.subscriptionNumber ?? 'the order page'} directly to review subscription details, invoices, and lifecycle status.
+                  Open {order?.subscriptionNumber ?? 'the order page'} directly to review
+                  subscription details, invoices, and lifecycle status.
                 </p>
               </Link>
             ) : null}
@@ -580,15 +752,31 @@ export function CheckoutSuccessPage() {
             <p className="text-sm font-semibold text-slate-950">Order summary</p>
             <div className="mt-4 grid gap-3 text-sm text-slate-600">
               <SummaryRow label="Order" value={order?.subscriptionNumber ?? 'Processing'} />
-              <SummaryRow label="Date" value={order ? formatDate(order.createdAt) : formatDate(invoice?.invoiceDate)} />
-              <SummaryRow label="Subtotal" value={formatCurrency(order?.subtotalAmount ?? invoice?.subtotalAmount ?? 0)} />
-              <SummaryRow label="Discount" value={formatCurrency(order?.discountAmount ?? invoice?.discountAmount ?? 0)} />
-              <SummaryRow label="Taxes" value={formatCurrency(order?.taxAmount ?? invoice?.taxAmount ?? 0)} />
-              <SummaryRow label="Total" value={formatCurrency(order?.totalAmount ?? invoice?.totalAmount ?? 0)} />
+              <SummaryRow
+                label="Date"
+                value={order ? formatDate(order.createdAt) : formatDate(invoice?.invoiceDate)}
+              />
+              <SummaryRow
+                label="Subtotal"
+                value={formatCurrency(order?.subtotalAmount ?? invoice?.subtotalAmount ?? 0)}
+              />
+              <SummaryRow
+                label="Discount"
+                value={formatCurrency(order?.discountAmount ?? invoice?.discountAmount ?? 0)}
+              />
+              <SummaryRow
+                label="Taxes"
+                value={formatCurrency(order?.taxAmount ?? invoice?.taxAmount ?? 0)}
+              />
+              <SummaryRow
+                label="Total"
+                value={formatCurrency(order?.totalAmount ?? invoice?.totalAmount ?? 0)}
+              />
             </div>
-            {(subscriptions.length > 1 || invoices.length > 1) ? (
+            {subscriptions.length > 1 || invoices.length > 1 ? (
               <p className="mt-4 rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                This checkout created {subscriptions.length} subscription order(s) and {invoices.length} invoice(s).
+                This checkout created {subscriptions.length} subscription order(s) and{' '}
+                {invoices.length} invoice(s).
               </p>
             ) : null}
           </aside>
@@ -602,7 +790,7 @@ function CheckoutShell({
   title,
   description,
   currentStep,
-  children
+  children,
 }: Readonly<{
   title: string;
   description: string;
@@ -612,10 +800,14 @@ function CheckoutShell({
   return (
     <div className="grid gap-6">
       <section className="overflow-hidden rounded-[34px] border border-emerald-900/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(240,253,250,0.88))] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">External checkout</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">
+          External checkout
+        </p>
         <div className="mt-3 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <h1 className="text-3xl font-black tracking-[-0.05em] text-slate-950 sm:text-4xl">{title}</h1>
+            <h1 className="text-3xl font-black tracking-[-0.05em] text-slate-950 sm:text-4xl">
+              {title}
+            </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">{description}</p>
           </div>
           <CheckoutStepTabs currentStep={currentStep} />
@@ -670,7 +862,7 @@ function CheckoutSummaryCard({
   onApplyCode,
   discountFeedback,
   detail,
-  actions
+  actions,
 }: Readonly<{
   summary?: CheckoutSummary;
   summaryLoading: boolean;
@@ -689,10 +881,23 @@ function CheckoutSummaryCard({
       <p className="text-sm font-semibold text-slate-950">Summary</p>
 
       <div className="mt-4 grid gap-3">
-        <SummaryRow label="Subtotal" value={summaryLoading ? 'Calculating...' : formatCurrency(summary?.subtotalAmount ?? 0)} />
-        <SummaryRow label="Discount" value={summaryLoading ? 'Calculating...' : formatCurrency(summary?.discountAmount ?? 0)} />
-        <SummaryRow label="Taxes" value={summaryLoading ? 'Calculating...' : formatCurrency(summary?.taxAmount ?? 0)} />
-        <SummaryRow emphasize label="Total" value={summaryLoading ? 'Calculating...' : formatCurrency(summary?.totalAmount ?? 0)} />
+        <SummaryRow
+          label="Subtotal"
+          value={summaryLoading ? 'Calculating...' : formatCurrency(summary?.subtotalAmount ?? 0)}
+        />
+        <SummaryRow
+          label="Discount"
+          value={summaryLoading ? 'Calculating...' : formatCurrency(summary?.discountAmount ?? 0)}
+        />
+        <SummaryRow
+          label="Taxes"
+          value={summaryLoading ? 'Calculating...' : formatCurrency(summary?.taxAmount ?? 0)}
+        />
+        <SummaryRow
+          emphasize
+          label="Total"
+          value={summaryLoading ? 'Calculating...' : formatCurrency(summary?.totalAmount ?? 0)}
+        />
       </div>
 
       {showDiscountInput && onCodeInputChange && onApplyCode ? (
@@ -726,7 +931,8 @@ function CheckoutSummaryCard({
 
       {showDiscountEligibilityWarning && summary?.appliedDiscountCode && !summary.hasDiscount ? (
         <p className="mt-4 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Saved code <span className="font-semibold">{summary.appliedDiscountCode}</span> does not currently match an active eligible discount for this cart.
+          Saved code <span className="font-semibold">{summary.appliedDiscountCode}</span> does not
+          currently match an active eligible discount for this cart.
         </p>
       ) : null}
 
@@ -743,7 +949,7 @@ function CheckoutSummaryCard({
 
 function QuantityStepper({
   value,
-  onChange
+  onChange,
 }: Readonly<{
   value: number;
   onChange: (value: number) => void;
@@ -787,7 +993,7 @@ function ProductThumb({ imageUrl, name }: Readonly<{ imageUrl: string | null; na
 function SummaryRow({
   label,
   value,
-  emphasize = false
+  emphasize = false,
 }: Readonly<{
   label: string;
   value: string;
@@ -802,7 +1008,9 @@ function SummaryRow({
       }`}
     >
       <span className={emphasize ? 'font-semibold' : undefined}>{label}</span>
-      <span className={emphasize ? 'font-semibold text-white' : 'font-semibold text-slate-950'}>{value}</span>
+      <span className={emphasize ? 'font-semibold text-white' : 'font-semibold text-slate-950'}>
+        {value}
+      </span>
     </div>
   );
 }
@@ -810,7 +1018,7 @@ function SummaryRow({
 function usePortalContact(token: string | null) {
   return useQuery({
     queryKey: ['portal-contact'],
-    queryFn: () => apiRequest<Contact>('/contacts/me', { token })
+    queryFn: () => apiRequest<Contact>('/contacts/me', { token }),
   });
 }
 
@@ -822,24 +1030,20 @@ function useCheckoutSummary(token: string | null, enabled: boolean) {
   const lines = useMemo(() => buildCheckoutRequestLines(items), [items]);
 
   const query = useQuery({
-    queryKey: [
-      'portal-checkout-summary',
-      discountCode,
-      lines
-    ],
+    queryKey: ['portal-checkout-summary', discountCode, lines],
     queryFn: () =>
       apiRequest<CheckoutSummary>('/checkout/summary', {
         token,
         method: 'POST',
         body: JSON.stringify({
           discountCode: discountCode || undefined,
-          lines
-        })
+          lines,
+        }),
       }),
     enabled: enabled && items.length > 0,
     staleTime: 60_000,
     gcTime: 5 * 60_000,
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
@@ -848,7 +1052,7 @@ function useCheckoutSummary(token: string | null, enabled: boolean) {
     }
 
     const missingProductIds = extractMissingProductIds(query.error.details).filter((productId) =>
-      items.some((item) => item.productId === productId)
+      items.some((item) => item.productId === productId),
     );
 
     if (!missingProductIds.length) {
@@ -859,13 +1063,13 @@ function useCheckoutSummary(token: string | null, enabled: boolean) {
     setCartRecoveryMessage(
       missingProductIds.length === 1
         ? 'An unavailable product was removed from your cart. Totals are refreshing.'
-        : 'Unavailable products were removed from your cart. Totals are refreshing.'
+        : 'Unavailable products were removed from your cart. Totals are refreshing.',
     );
   }, [items, query.error, removeProducts]);
 
   return {
     ...query,
-    cartRecoveryMessage
+    cartRecoveryMessage,
   };
 }
 
@@ -875,14 +1079,17 @@ function useSummaryItems(summary?: CheckoutSummary) {
       new Map(
         (summary?.items ?? []).map((item) => [
           checkoutSummaryKey(item.productId, item.recurringPlanId, item.variantId),
-          item
-        ])
+          item,
+        ]),
       ),
-    [summary]
+    [summary],
   );
 }
 
-function buildLocalCheckoutSummary(items: CartItem[], appliedDiscountCode?: string | null): CheckoutSummary {
+function buildLocalCheckoutSummary(
+  items: CartItem[],
+  appliedDiscountCode?: string | null,
+): CheckoutSummary {
   const subtotalAmount = cartSubtotal(items);
 
   return {
@@ -894,14 +1101,14 @@ function buildLocalCheckoutSummary(items: CartItem[], appliedDiscountCode?: stri
       unitPrice: item.unitPrice,
       discountAmount: 0,
       taxAmount: 0,
-      lineTotal: item.unitPrice * item.quantity
+      lineTotal: item.unitPrice * item.quantity,
     })),
     subtotalAmount,
     discountAmount: 0,
     taxAmount: 0,
     totalAmount: subtotalAmount,
     appliedDiscountCode: appliedDiscountCode?.trim().toUpperCase() || null,
-    hasDiscount: false
+    hasDiscount: false,
   };
 }
 
@@ -910,14 +1117,11 @@ function buildCheckoutRequestLines(items: CartItem[]) {
     productId: item.productId,
     recurringPlanId: item.recurringPlanId,
     ...(item.variantId ? { variantId: item.variantId } : {}),
-    quantity: item.quantity
+    quantity: item.quantity,
   }));
 }
 
-function resolveCheckoutSummaryError(
-  error: unknown,
-  summary?: CheckoutSummary
-) {
+function resolveCheckoutSummaryError(error: unknown, summary?: CheckoutSummary) {
   if (!(error instanceof ApiError)) {
     return null;
   }
@@ -943,21 +1147,35 @@ function extractMissingProductIds(details: unknown) {
     return [];
   }
 
-  return missingProductIds.filter((value): value is string => typeof value === 'string' && value.length > 0);
+  return missingProductIds.filter(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
 }
 
-function checkoutSummaryKey(productId: string, recurringPlanId: string | null, variantId: string | null) {
+function checkoutSummaryKey(
+  productId: string,
+  recurringPlanId: string | null,
+  variantId: string | null,
+) {
   return `${productId}::${recurringPlanId ?? 'no-plan'}::${variantId ?? 'base'}`;
 }
 
-function AddressBlock() {
-  const address = readStoredCheckoutAddress();
-
-  if (!address) {
-    return <p className="text-sm text-slate-500">Default profile address will be used.</p>;
+function AddressBlock({
+  address,
+  isLoading = false,
+}: Readonly<{
+  address: CheckoutAddress | null;
+  isLoading?: boolean;
+}>) {
+  if (address) {
+    return <AddressPreview address={address} />;
   }
 
-  return <AddressPreview address={address} />;
+  if (isLoading) {
+    return <p className="text-sm text-slate-500">Loading selected address...</p>;
+  }
+
+  return <p className="text-sm text-slate-500">No profile address is available yet.</p>;
 }
 
 function readStoredCheckoutAddress(): CheckoutAddress | null {
@@ -973,6 +1191,38 @@ function readStoredCheckoutAddress(): CheckoutAddress | null {
   } catch {
     return null;
   }
+}
+
+function createEmptyCheckoutAddress(): CheckoutAddress {
+  return {
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: 'India',
+  };
+}
+
+function normalizeCheckoutAddress(address: CheckoutAddress | null): CheckoutAddress | null {
+  if (!address) {
+    return null;
+  }
+
+  return {
+    line1: address.line1.trim(),
+    line2: address.line2?.trim() || '',
+    city: address.city.trim(),
+    state: address.state.trim(),
+    postalCode: address.postalCode.trim(),
+    country: address.country.trim() || 'India',
+  };
+}
+
+function isCheckoutAddressComplete(address: CheckoutAddress | null): address is CheckoutAddress {
+  return Boolean(
+    address?.line1 && address.city && address.state && address.postalCode && address.country,
+  );
 }
 
 function AddressPreview({ address }: Readonly<{ address: CheckoutAddress }>) {

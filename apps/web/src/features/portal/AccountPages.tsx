@@ -3,8 +3,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { downloadSubscriptionPdf } from './orderPdf';
-import { CalendarRepeatIcon, CreditCardIcon, DownloadIcon, PrinterIcon, ReceiptIcon } from '../../components/icons';
+import {
+  CalendarRepeatIcon,
+  CreditCardIcon,
+  DownloadIcon,
+  PrinterIcon,
+  ReceiptIcon,
+} from '../../components/icons';
 import { StatusBadge, Surface } from '../../components/layout';
+import { getPrimaryAddress } from '../../lib/address';
 import { ApiError } from '../../lib/api';
 import {
   apiRequest,
@@ -15,10 +22,11 @@ import {
   type PaginatedResponse,
   type RazorpayOrder,
   type RazorpayVerificationResult,
-  type Subscription
+  type Subscription,
 } from '../../lib/api';
 import { openRazorpayCheckout } from '../../lib/razorpay';
 import { useSession } from '../../lib/session';
+import { formatStatusLabel } from '../../lib/ui';
 
 const fieldClass = 'app-input';
 const ORDERS_PAGE_SIZE = 12;
@@ -34,22 +42,22 @@ export function ProfilePage() {
     city: '',
     state: '',
     postalCode: '',
-    country: 'India'
+    country: 'India',
   });
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const contactQuery = useQuery({
     queryKey: ['profile-contact'],
-    queryFn: () => apiRequest<Contact>('/contacts/me', { token })
+    queryFn: () => apiRequest<Contact>('/contacts/me', { token }),
   });
   const ordersQuery = useQuery({
     queryKey: ['profile-orders'],
     queryFn: () =>
-      apiRequest<PaginatedResponse<Subscription>>('/subscriptions?page=1&pageSize=3', { token })
+      apiRequest<PaginatedResponse<Subscription>>('/subscriptions?page=1&pageSize=3', { token }),
   });
 
   const latestSubscriptions = ordersQuery.data?.items ?? [];
-  const defaultAddress = contactQuery.data?.addresses.find((address) => address.isDefault) ?? contactQuery.data?.addresses[0];
+  const defaultAddress = getPrimaryAddress(contactQuery.data?.addresses);
 
   useEffect(() => {
     if (!contactQuery.data) {
@@ -64,7 +72,7 @@ export function ProfilePage() {
       city: defaultAddress?.city ?? '',
       state: defaultAddress?.state ?? '',
       postalCode: defaultAddress?.postalCode ?? '',
-      country: defaultAddress?.country ?? 'India'
+      country: defaultAddress?.country ?? 'India',
     });
   }, [contactQuery.data, defaultAddress]);
 
@@ -89,10 +97,10 @@ export function ProfilePage() {
               state: form.state,
               postalCode: form.postalCode,
               country: form.country,
-              isDefault: true
-            }
-          ]
-        })
+              isDefault: true,
+            },
+          ],
+        }),
       });
     },
     onSuccess: async () => {
@@ -102,8 +110,10 @@ export function ProfilePage() {
     },
     onError: (mutationError) => {
       setMessage(null);
-      setError(mutationError instanceof ApiError ? mutationError.message : 'Unable to update profile');
-    }
+      setError(
+        mutationError instanceof ApiError ? mutationError.message : 'Unable to update profile',
+      );
+    },
   });
 
   return (
@@ -119,32 +129,75 @@ export function ProfilePage() {
             <h3 className="section-title">Contact and billing details</h3>
           </div>
           <EditableField label="Name">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} value={form.name} />
+            <input
+              className={fieldClass}
+              onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
+              value={form.name}
+            />
           </EditableField>
           <ReadOnlyField label="Email" value={user?.email ?? ''} />
           <EditableField label="Phone Number">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))} value={form.phone} />
+            <input
+              className={fieldClass}
+              onChange={(event) => setForm((value) => ({ ...value, phone: event.target.value }))}
+              value={form.phone}
+            />
           </EditableField>
-          <ReadOnlyField label="Related Contact" value={contactQuery.data?.id ?? 'Linked automatically'} />
+          <ReadOnlyField
+            label="Related Contact"
+            value={contactQuery.data?.id ?? 'Linked automatically'}
+          />
           <EditableField label="Company">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, companyName: event.target.value }))} value={form.companyName} />
+            <input
+              className={fieldClass}
+              onChange={(event) =>
+                setForm((value) => ({ ...value, companyName: event.target.value }))
+              }
+              value={form.companyName}
+            />
           </EditableField>
           <EditableField label="Address">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, line1: event.target.value }))} value={form.line1} />
+            <input
+              className={fieldClass}
+              onChange={(event) => setForm((value) => ({ ...value, line1: event.target.value }))}
+              value={form.line1}
+            />
           </EditableField>
           <EditableField label="City">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, city: event.target.value }))} value={form.city} />
+            <input
+              className={fieldClass}
+              onChange={(event) => setForm((value) => ({ ...value, city: event.target.value }))}
+              value={form.city}
+            />
           </EditableField>
           <EditableField label="State">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, state: event.target.value }))} value={form.state} />
+            <input
+              className={fieldClass}
+              onChange={(event) => setForm((value) => ({ ...value, state: event.target.value }))}
+              value={form.state}
+            />
           </EditableField>
           <EditableField label="Postal Code">
-            <input className={fieldClass} onChange={(event) => setForm((value) => ({ ...value, postalCode: event.target.value }))} value={form.postalCode} />
+            <input
+              className={fieldClass}
+              onChange={(event) =>
+                setForm((value) => ({ ...value, postalCode: event.target.value }))
+              }
+              value={form.postalCode}
+            />
           </EditableField>
-          {message ? <p className="theme-message theme-message-success md:col-span-2">{message}</p> : null}
-          {error ? <p className="theme-message theme-message-error md:col-span-2">{error}</p> : null}
+          {message ? (
+            <p className="theme-message theme-message-success md:col-span-2">{message}</p>
+          ) : null}
+          {error ? (
+            <p className="theme-message theme-message-error md:col-span-2">{error}</p>
+          ) : null}
           <div className="flex items-end gap-3 md:col-span-2">
-            <button className="app-btn app-btn-primary" onClick={() => saveMutation.mutate()} type="button">
+            <button
+              className="app-btn app-btn-primary"
+              onClick={() => saveMutation.mutate()}
+              type="button"
+            >
               Save Profile
             </button>
             <Link className="app-btn app-btn-secondary" to="/reset-password">
@@ -157,20 +210,31 @@ export function ProfilePage() {
           <h3 className="section-title">Your subscriptions</h3>
           <div className="mt-4 grid gap-3">
             {latestSubscriptions.map((subscription) => (
-              <div className="app-soft-panel px-4 py-3" key={subscription.id}>
+              <Link
+                className="app-soft-panel block rounded-[28px] px-4 py-3 transition hover:border-[color:var(--color-primary-strong)] hover:shadow-[0_16px_36px_rgba(15,23,42,0.08)]"
+                key={subscription.id}
+                to={`/account/orders/${subscription.id}`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-[color:var(--color-text-primary)]">{subscription.subscriptionNumber}</p>
-                    <p className="text-sm muted">{subscription.recurringPlan?.name ?? 'Recurring plan'}</p>
+                    <p className="font-semibold text-[color:var(--color-text-primary)]">
+                      {subscription.subscriptionNumber}
+                    </p>
+                    <p className="text-sm muted">
+                      {subscription.recurringPlan?.name ?? 'Recurring plan'}
+                    </p>
                   </div>
                   <StatusBadge status={subscription.status} />
                 </div>
                 <p className="mt-2 text-sm muted">
-                  Start {formatDate(subscription.startDate)} | Next invoice {formatDate(subscription.nextInvoiceDate)}
+                  Start {formatDate(subscription.startDate)} | Next invoice{' '}
+                  {formatDate(subscription.nextInvoiceDate)}
                 </p>
-              </div>
+              </Link>
             ))}
-            {latestSubscriptions.length === 0 ? <p className="text-sm muted">No subscriptions yet.</p> : null}
+            {latestSubscriptions.length === 0 ? (
+              <p className="text-sm muted">No subscriptions yet.</p>
+            ) : null}
           </div>
         </div>
       </div>
@@ -186,7 +250,10 @@ export function OrdersPage() {
   const subscriptionsQuery = useQuery({
     queryKey: ['portal-orders', page],
     queryFn: () =>
-      apiRequest<PaginatedResponse<Subscription>>(`/subscriptions?page=${page}&pageSize=${ORDERS_PAGE_SIZE}`, { token })
+      apiRequest<PaginatedResponse<Subscription>>(
+        `/subscriptions?page=${page}&pageSize=${ORDERS_PAGE_SIZE}`,
+        { token },
+      ),
   });
   const orders = subscriptionsQuery.data?.items ?? [];
   const totalOrders = subscriptionsQuery.data?.total ?? 0;
@@ -196,13 +263,15 @@ export function OrdersPage() {
     try {
       setDownloadError(null);
       setDownloadingOrderId(subscriptionId);
-      const subscription = await apiRequest<Subscription>(`/subscriptions/${subscriptionId}`, { token });
+      const subscription = await apiRequest<Subscription>(`/subscriptions/${subscriptionId}`, {
+        token,
+      });
       await downloadSubscriptionPdf(subscription);
     } catch (downloadErrorValue) {
       setDownloadError(
         downloadErrorValue instanceof ApiError || downloadErrorValue instanceof Error
           ? downloadErrorValue.message
-          : 'Unable to download order PDF'
+          : 'Unable to download order PDF',
       );
     } finally {
       setDownloadingOrderId(null);
@@ -210,7 +279,10 @@ export function OrdersPage() {
   };
 
   return (
-    <Surface description="Review subscription orders, totals, and printable details." title="My Account">
+    <Surface
+      description="Review subscription orders, totals, and printable details."
+      title="My Account"
+    >
       <AccountTabs active="orders" />
       <div className="mb-5">
         <p className="eyebrow mb-2">Orders</p>
@@ -218,11 +290,14 @@ export function OrdersPage() {
       </div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-sm muted">
         <p>
-          Showing {orders.length ? (page - 1) * ORDERS_PAGE_SIZE + 1 : 0}-{Math.min(page * ORDERS_PAGE_SIZE, totalOrders)} of {totalOrders} orders
+          Showing {orders.length ? (page - 1) * ORDERS_PAGE_SIZE + 1 : 0}-
+          {Math.min(page * ORDERS_PAGE_SIZE, totalOrders)} of {totalOrders} orders
         </p>
         <PaginationControls currentPage={page} onPageChange={setPage} totalPages={totalPages} />
       </div>
-      {downloadError ? <p className="theme-message theme-message-error mb-4">{downloadError}</p> : null}
+      {downloadError ? (
+        <p className="theme-message theme-message-error mb-4">{downloadError}</p>
+      ) : null}
       <div className="table-shell">
         <table className="app-table min-w-[820px] text-left text-sm">
           <thead>
@@ -238,13 +313,18 @@ export function OrdersPage() {
             {orders.map((subscription) => (
               <tr key={subscription.id}>
                 <td className="px-4 py-3">
-                  <Link className="font-semibold text-[color:var(--color-primary-strong)]" to={`/account/orders/${subscription.id}`}>
+                  <Link
+                    className="font-semibold text-[color:var(--color-primary-strong)]"
+                    to={`/account/orders/${subscription.id}`}
+                  >
                     {subscription.subscriptionNumber}
                   </Link>
                 </td>
                 <td className="px-4 py-3">{formatDate(subscription.createdAt)}</td>
                 <td className="px-4 py-3">{formatCurrency(subscription.totalAmount)}</td>
-                <td className="px-4 py-3"><StatusBadge status={subscription.status} /></td>
+                <td className="px-4 py-3">
+                  <StatusBadge status={subscription.status} />
+                </td>
                 <td className="px-4 py-3">
                   <button
                     className="font-semibold text-[color:var(--color-primary-strong)] disabled:cursor-not-allowed disabled:opacity-60"
@@ -287,7 +367,7 @@ export function InvoiceDetailPage() {
   const invoiceQuery = useQuery({
     queryKey: ['portal-invoice', id],
     queryFn: () => apiRequest<Invoice>(`/invoices/${id}`, { token }),
-    enabled: Boolean(id)
+    enabled: Boolean(id),
   });
 
   const payMutation = useMutation({
@@ -297,8 +377,8 @@ export function InvoiceDetailPage() {
         method: 'POST',
         body: JSON.stringify({
           purpose: 'invoice',
-          invoiceId: id
-        })
+          invoiceId: id,
+        }),
       });
 
       const razorpayPayment = await openRazorpayCheckout({
@@ -308,7 +388,7 @@ export function InvoiceDetailPage() {
         currency: order.currency,
         merchantName: order.merchantName,
         description: order.description,
-        customer: order.customer
+        customer: order.customer,
       });
 
       return apiRequest<RazorpayVerificationResult>('/payments/razorpay/verify', {
@@ -318,22 +398,24 @@ export function InvoiceDetailPage() {
           purpose: 'invoice',
           razorpayOrderId: razorpayPayment.razorpay_order_id,
           razorpayPaymentId: razorpayPayment.razorpay_payment_id,
-          razorpaySignature: razorpayPayment.razorpay_signature
-        })
+          razorpaySignature: razorpayPayment.razorpay_signature,
+        }),
       });
     },
     onSuccess: async () => {
       setPaymentError(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['portal-invoice', id] }),
-        queryClient.invalidateQueries({ queryKey: ['portal-orders'] })
+        queryClient.invalidateQueries({ queryKey: ['portal-orders'] }),
       ]);
     },
     onError: (mutationError) => {
       setPaymentError(
-        mutationError instanceof ApiError || mutationError instanceof Error ? mutationError.message : 'Payment failed'
+        mutationError instanceof ApiError || mutationError instanceof Error
+          ? mutationError.message
+          : 'Payment failed',
       );
-    }
+    },
   });
 
   const invoice = invoiceQuery.data;
@@ -353,17 +435,29 @@ export function InvoiceDetailPage() {
       actions={
         <div className="invoice-screen-actions flex flex-wrap gap-3">
           {invoice.subscriptionOrder ? (
-            <Link className="app-btn app-btn-secondary" to={`/account/orders/${invoice.subscriptionOrder.id}`}>
+            <Link
+              className="app-btn app-btn-secondary"
+              to={`/account/orders/${invoice.subscriptionOrder.id}`}
+            >
               <ReceiptIcon className="mr-2 inline h-4 w-4" />
               Subscription
             </Link>
           ) : null}
-          <button className="app-btn app-btn-secondary" onClick={() => window.print()} type="button">
+          <button
+            className="app-btn app-btn-secondary"
+            onClick={() => window.print()}
+            type="button"
+          >
             <PrinterIcon className="mr-2 inline h-4 w-4" />
             Print
           </button>
           {invoice.status === 'confirmed' ? (
-            <button className="app-btn app-btn-primary" disabled={payMutation.isPending} onClick={() => payMutation.mutate()} type="button">
+            <button
+              className="app-btn app-btn-primary"
+              disabled={payMutation.isPending}
+              onClick={() => payMutation.mutate()}
+              type="button"
+            >
               <CreditCardIcon className="mr-2 inline h-4 w-4" />
               {payMutation.isPending ? 'Opening Razorpay...' : 'Pay with Razorpay'}
             </button>
@@ -372,25 +466,49 @@ export function InvoiceDetailPage() {
       }
     >
       <AccountTabs active="orders" />
-      {paymentError ? <p className="theme-message theme-message-error mb-4">{paymentError}</p> : null}
+      {paymentError ? (
+        <p className="theme-message theme-message-error mb-4">{paymentError}</p>
+      ) : null}
       <div className="invoice-screen-summary mb-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="app-card p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--color-primary-strong)]">Invoice overview</p>
-              <h3 className="mt-2 text-xl font-bold text-[color:var(--color-text-primary)]">{invoice.invoiceNumber}</h3>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--color-primary-strong)]">
+                Invoice overview
+              </p>
+              <h3 className="mt-2 text-xl font-bold text-[color:var(--color-text-primary)]">
+                {invoice.invoiceNumber}
+              </h3>
             </div>
             <StatusBadge status={invoice.status} />
           </div>
           <div className="grid gap-3 text-sm muted sm:grid-cols-2">
-            <InvoiceMetaRow icon={<CalendarRepeatIcon className="h-4 w-4" />} label="Invoice date" value={formatDate(invoice.invoiceDate)} />
-            <InvoiceMetaRow icon={<CalendarRepeatIcon className="h-4 w-4" />} label="Due date" value={formatDate(invoice.dueDate)} />
-            <InvoiceMetaRow icon={<ReceiptIcon className="h-4 w-4" />} label="Reference" value={invoice.subscriptionOrder?.subscriptionNumber ?? 'Subscription'} />
-            <InvoiceMetaRow icon={<CreditCardIcon className="h-4 w-4" />} label="Amount due" value={formatCurrency(invoice.amountDue)} />
+            <InvoiceMetaRow
+              icon={<CalendarRepeatIcon className="h-4 w-4" />}
+              label="Invoice date"
+              value={formatDate(invoice.invoiceDate)}
+            />
+            <InvoiceMetaRow
+              icon={<CalendarRepeatIcon className="h-4 w-4" />}
+              label="Due date"
+              value={formatDate(invoice.dueDate)}
+            />
+            <InvoiceMetaRow
+              icon={<ReceiptIcon className="h-4 w-4" />}
+              label="Reference"
+              value={invoice.subscriptionOrder?.subscriptionNumber ?? 'Subscription'}
+            />
+            <InvoiceMetaRow
+              icon={<CreditCardIcon className="h-4 w-4" />}
+              label="Amount due"
+              value={formatCurrency(invoice.amountDue)}
+            />
           </div>
         </div>
         <div className="app-card p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--color-primary-strong)]">Payment summary</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--color-primary-strong)]">
+            Payment summary
+          </p>
           <div className="mt-4 grid gap-3">
             <SummaryRow label="Subtotal" value={formatCurrency(invoice.subtotalAmount)} />
             <SummaryRow label="Discount" value={formatCurrency(invoice.discountAmount)} />
@@ -408,7 +526,8 @@ export function InvoiceDetailPage() {
             <p className="invoice-doc-kicker">Veltrix Subscription ERP</p>
             <h2>Tax Invoice</h2>
             <p className="invoice-doc-muted">
-              Source: {invoice.sourceLabel} {invoice.paymentTermLabel ? `| Payment term: ${invoice.paymentTermLabel}` : ''}
+              Source: {invoice.sourceLabel}{' '}
+              {invoice.paymentTermLabel ? `| Payment term: ${invoice.paymentTermLabel}` : ''}
             </p>
           </div>
           <div className="invoice-doc-badge">
@@ -430,10 +549,16 @@ export function InvoiceDetailPage() {
           <div className="invoice-doc-panel">
             <p className="invoice-doc-label">Subscription reference</p>
             <div className="invoice-doc-list">
-              <InvoicePrintRow label="Order number" value={invoice.subscriptionOrder?.subscriptionNumber ?? 'Subscription'} />
+              <InvoicePrintRow
+                label="Order number"
+                value={invoice.subscriptionOrder?.subscriptionNumber ?? 'Subscription'}
+              />
               <InvoicePrintRow label="Source label" value={invoice.sourceLabel} />
               <InvoicePrintRow label="Currency" value={invoice.currencyCode} />
-              <InvoicePrintRow label="Payment term" value={invoice.paymentTermLabel ?? 'Standard'} />
+              <InvoicePrintRow
+                label="Payment term"
+                value={invoice.paymentTermLabel ?? 'Standard'}
+              />
             </div>
           </div>
         </div>
@@ -470,7 +595,9 @@ export function InvoiceDetailPage() {
                   <div className="invoice-doc-payment" key={payment.id}>
                     <div>
                       <strong>{payment.paymentReference}</strong>
-                      <p>{payment.paymentMethod} via {payment.provider}</p>
+                      <p>
+                        {payment.paymentMethod} via {payment.provider}
+                      </p>
                     </div>
                     <div className="invoice-doc-payment-amount">
                       <strong>{formatCurrency(payment.amount)}</strong>
@@ -511,7 +638,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
   const subscriptionQuery = useQuery({
     queryKey: ['portal-order', id],
     queryFn: () => apiRequest<Subscription>(`/subscriptions/${id}`, { token }),
-    enabled: Boolean(id)
+    enabled: Boolean(id),
   });
 
   const workflowMutation = useMutation({
@@ -523,7 +650,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
       return apiRequest<Subscription>(`/subscriptions/${id}/${action}`, {
         token,
         method: 'POST',
-        body: action === 'upsell' ? JSON.stringify({}) : undefined
+        body: action === 'upsell' ? JSON.stringify({}) : undefined,
       });
     },
     onSuccess: async (result, action) => {
@@ -539,7 +666,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
                 ? 'Subscription resumed.'
                 : action === 'renew'
                   ? `Renewal created: ${result.subscriptionNumber}`
-                  : `Upsell created: ${result.subscriptionNumber}`
+                  : `Upsell created: ${result.subscriptionNumber}`,
       );
 
       await Promise.all([
@@ -548,7 +675,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
         queryClient.invalidateQueries({ queryKey: ['profile-orders'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-subscriptions'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-subscriptions'] })
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-subscriptions'] }),
       ]);
 
       if (action === 'renew' || action === 'upsell') {
@@ -557,32 +684,35 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
     },
     onError: (mutationError) => {
       setMessage(null);
-      setError(mutationError instanceof ApiError ? mutationError.message : 'Subscription action failed');
-    }
+      setError(
+        mutationError instanceof ApiError ? mutationError.message : 'Subscription action failed',
+      );
+    },
   });
 
   const subscription = subscriptionQuery.data;
-  const hasCompletedPurchase = Boolean(subscription?.invoices.some((invoice) => invoice.status === 'paid'));
-  const canConfirm = mode === 'detail' && ['draft', 'quotation', 'quotation_sent'].includes(subscription?.status ?? '');
-  const canRenew = mode === 'detail' && hasCompletedPurchase;
-  const canUpsell = mode === 'detail' && hasCompletedPurchase;
-  const canClose =
+  const hasCompletedPurchase = Boolean(
+    subscription?.invoices.some((invoice) => invoice.status === 'paid'),
+  );
+  const canConfirm =
     mode === 'detail' &&
-    ['confirmed', 'active'].includes(subscription?.status ?? '') &&
-    Boolean(subscription?.recurringPlan?.isClosable);
+    ['draft', 'quotation', 'quotation_sent'].includes(subscription?.status ?? '');
   const canPause =
     mode === 'detail' &&
     ['confirmed', 'active'].includes(subscription?.status ?? '') &&
     Boolean(subscription?.recurringPlan?.isPausable);
-  const canResume = mode === 'detail' && subscription?.status === 'paused' && Boolean(subscription?.recurringPlan?.isPausable);
+  const canResume =
+    mode === 'detail' &&
+    subscription?.status === 'paused' &&
+    Boolean(subscription?.recurringPlan?.isPausable);
   const shouldAutoDownloadPdf = mode === 'detail' && searchParams.get('print') === '1';
   const historyItems = useMemo(
     () =>
       (subscription?.childOrders ?? []).map((child) => ({
         ...child,
-        label: child.relationType === 'upsell' ? 'Upsell' : 'Renewal'
+        label: child.relationType === 'upsell' ? 'Upsell' : 'Renewal',
       })),
-    [subscription?.childOrders]
+    [subscription?.childOrders],
   );
 
   const handleDownloadPdf = async () => {
@@ -598,7 +728,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
       setError(
         downloadErrorValue instanceof ApiError || downloadErrorValue instanceof Error
           ? downloadErrorValue.message
-          : 'Unable to download order PDF'
+          : 'Unable to download order PDF',
       );
     } finally {
       setIsDownloadingPdf(false);
@@ -630,41 +760,47 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
 
   return (
     <Surface
-      title={mode === 'preview' ? `${subscription.subscriptionNumber} Preview` : subscription.subscriptionNumber}
+      title={
+        mode === 'preview'
+          ? `${subscription.subscriptionNumber} Preview`
+          : subscription.subscriptionNumber
+      }
       actions={
         mode === 'detail' ? (
           <div className="flex flex-wrap gap-3">
             {canConfirm ? (
-              <button className="app-btn app-btn-primary px-4 py-2 text-sm" onClick={() => workflowMutation.mutate('confirm')} type="button">
+              <button
+                className="app-btn app-btn-primary px-4 py-2 text-sm"
+                onClick={() => workflowMutation.mutate('confirm')}
+                type="button"
+              >
                 Confirm
               </button>
             ) : null}
-            {canRenew ? (
-              <button className="app-btn app-btn-secondary px-4 py-2 text-sm" onClick={() => workflowMutation.mutate('renew')} type="button">
-                Renew
-              </button>
-            ) : null}
-            {canUpsell ? (
-              <button className="app-btn app-btn-secondary px-4 py-2 text-sm" onClick={() => workflowMutation.mutate('upsell')} type="button">
-                Upsell
-              </button>
-            ) : null}
-            {canClose ? (
-              <button className="app-btn app-btn-secondary px-4 py-2 text-sm" onClick={() => workflowMutation.mutate('close')} type="button">
-                Close
-              </button>
-            ) : null}
             {canPause ? (
-              <button className="app-btn app-btn-secondary px-4 py-2 text-sm" onClick={() => workflowMutation.mutate('pause')} type="button">
+              <button
+                className="app-btn app-btn-secondary px-4 py-2 text-sm"
+                onClick={() => workflowMutation.mutate('pause')}
+                type="button"
+              >
                 Pause
               </button>
             ) : null}
             {canResume ? (
-              <button className="app-btn app-btn-secondary px-4 py-2 text-sm" onClick={() => workflowMutation.mutate('resume')} type="button">
+              <button
+                className="app-btn app-btn-secondary px-4 py-2 text-sm"
+                onClick={() => workflowMutation.mutate('resume')}
+                type="button"
+              >
                 Resume
               </button>
             ) : null}
-            <button className="app-btn app-btn-secondary px-4 py-2 text-sm" disabled={isDownloadingPdf} onClick={() => void handleDownloadPdf()} type="button">
+            <button
+              className="app-btn app-btn-secondary px-4 py-2 text-sm"
+              disabled={isDownloadingPdf}
+              onClick={() => void handleDownloadPdf()}
+              type="button"
+            >
               <DownloadIcon className="h-4 w-4" />
               {isDownloadingPdf ? 'Preparing PDF...' : 'Download PDF'}
             </button>
@@ -683,7 +819,8 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <div>
           <p className="muted">
-            {subscription.customerContact.name} | {subscription.status} | {subscription.recurringPlan?.name ?? 'Recurring plan'}
+            {subscription.customerContact.name} | {formatStatusLabel(subscription.status)} |{' '}
+            {subscription.recurringPlan?.name ?? 'Recurring plan'}
           </p>
           <div className="table-shell mt-5">
             <table className="app-table min-w-[720px]">
@@ -714,7 +851,9 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
                         )}
                         <div>
                           <p>{line.productNameSnapshot}</p>
-                          {line.variant?.name ? <p className="text-xs muted">{line.variant.name}</p> : null}
+                          {line.variant?.name ? (
+                            <p className="text-xs muted">{line.variant.name}</p>
+                          ) : null}
                         </div>
                       </div>
                     </td>
@@ -728,46 +867,76 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
             {subscription.invoices.map((invoice) => (
-              <Link className="app-btn app-btn-secondary px-4 py-3 text-sm" key={invoice.id} to={`/account/invoices/${invoice.id}`}>
+              <Link
+                className="app-btn app-btn-secondary px-4 py-3 text-sm"
+                key={invoice.id}
+                to={`/account/invoices/${invoice.id}`}
+              >
                 {invoice.invoiceNumber}
               </Link>
             ))}
-            {subscription.invoices.length === 0 ? <span className="app-btn app-btn-secondary border-dashed px-4 py-3 text-sm text-[color:var(--color-text-secondary)]">No invoices yet</span> : null}
+            {subscription.invoices.length === 0 ? (
+              <span className="app-btn app-btn-secondary border-dashed px-4 py-3 text-sm text-[color:var(--color-text-secondary)]">
+                No invoices yet
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="grid gap-4">
           <div className="app-card p-5">
-            <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">Subscription summary</p>
+            <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">
+              Subscription summary
+            </p>
             <div className="mt-4 grid gap-3 text-sm">
-              <SummaryRow label="Source" value={subscription.sourceChannel} />
-              <SummaryRow label="Quotation Date" value={formatDate(subscription.quotationDate)} />
-              <SummaryRow label="Quotation Expires" value={formatDate(subscription.quotationExpiresAt)} />
-              <SummaryRow label="Start Date" value={formatDate(subscription.startDate)} />
-              <SummaryRow label="Next Invoice" value={formatDate(subscription.nextInvoiceDate)} />
-              <SummaryRow label="Expiration Date" value={formatDate(subscription.expirationDate)} />
-              <SummaryRow label="Payment Term" value={subscription.paymentTermLabel ?? 'Standard'} />
-              <SummaryRow label="Untaxed Amount" value={formatCurrency(subscription.subtotalAmount)} />
+              {buildSubscriptionSummaryRows(subscription).map((row) => (
+                <SummaryRow key={row.label} label={row.label} value={row.value} />
+              ))}
+              <SummaryRow
+                label="Payment Term"
+                value={textValue(subscription.paymentTermLabel, 'Standard')}
+              />
+              <SummaryRow
+                label="Untaxed Amount"
+                value={formatCurrency(subscription.subtotalAmount)}
+              />
               <SummaryRow label="Discount" value={formatCurrency(subscription.discountAmount)} />
               <SummaryRow label="Tax" value={formatCurrency(subscription.taxAmount)} />
               <SummaryRow label="Total" value={formatCurrency(subscription.totalAmount)} />
             </div>
           </div>
           <div className="app-card p-5">
-            <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">Lifecycle history</p>
+            <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">
+              Lifecycle history
+            </p>
             <div className="mt-4 grid gap-3">
               {subscription.parentOrder ? (
-                <Link className="app-soft-panel rounded-2xl px-4 py-3 text-sm font-medium text-[color:var(--color-text-primary)]" to={`/account/orders/${subscription.parentOrder.id}`}>
-                  Parent order: {subscription.parentOrder.subscriptionNumber} | {subscription.parentOrder.status}
+                <Link
+                  className="app-soft-panel rounded-2xl px-4 py-3 text-sm font-medium text-[color:var(--color-text-primary)]"
+                  to={`/account/orders/${subscription.parentOrder.id}`}
+                >
+                  Parent order: {subscription.parentOrder.subscriptionNumber} |{' '}
+                  {formatStatusLabel(subscription.parentOrder.status)}
                 </Link>
               ) : (
-                <div className="app-soft-panel rounded-2xl px-4 py-3 text-sm text-[color:var(--color-text-secondary)]">This is the root subscription.</div>
+                <div className="app-soft-panel rounded-2xl px-4 py-3 text-sm text-[color:var(--color-text-secondary)]">
+                  This is the root subscription.
+                </div>
               )}
               {historyItems.map((child) => (
-                <Link className="app-soft-panel rounded-2xl px-4 py-3 text-sm font-medium text-[color:var(--color-text-primary)]" key={child.id} to={`/account/orders/${child.id}`}>
-                  {child.label}: {child.subscriptionNumber} | {child.status} | {formatDate(child.createdAt)}
+                <Link
+                  className="app-soft-panel rounded-2xl px-4 py-3 text-sm font-medium text-[color:var(--color-text-primary)]"
+                  key={child.id}
+                  to={`/account/orders/${child.id}`}
+                >
+                  {child.label}: {child.subscriptionNumber} | {formatStatusLabel(child.status)} |{' '}
+                  {formatDate(child.createdAt)}
                 </Link>
               ))}
-              {historyItems.length === 0 ? <div className="app-soft-panel rounded-2xl border-dashed px-4 py-3 text-sm text-[color:var(--color-text-secondary)]">No renewals or upsells yet.</div> : null}
+              {historyItems.length === 0 ? (
+                <div className="app-soft-panel rounded-2xl border-dashed px-4 py-3 text-sm text-[color:var(--color-text-secondary)]">
+                  No renewals or upsells yet.
+                </div>
+              ) : null}
             </div>
           </div>
           {subscription.notes ? (
@@ -786,15 +955,80 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] px-4 py-3">
       <span className="muted">{label}</span>
-      <span className="text-right font-semibold text-[color:var(--color-text-primary)]">{value}</span>
+      <span className="text-right font-semibold text-[color:var(--color-text-primary)]">
+        {value}
+      </span>
     </div>
   );
+}
+
+function buildSubscriptionSummaryRows(subscription: Subscription) {
+  const rows = [
+    { label: 'Status', value: formatStatusLabel(subscription.status) },
+    { label: 'Source', value: formatSubscriptionSource(subscription.sourceChannel) },
+    { label: 'Created On', value: formatDate(subscription.createdAt) },
+  ];
+
+  if (subscription.quotationDate) {
+    rows.push({ label: 'Quotation Date', value: formatDate(subscription.quotationDate) });
+  }
+
+  if (
+    subscription.quotationExpiresAt &&
+    ['draft', 'quotation', 'quotation_sent'].includes(subscription.status)
+  ) {
+    rows.push({
+      label: 'Quotation Expires',
+      value: formatDate(subscription.quotationExpiresAt),
+    });
+  }
+
+  if (subscription.confirmedAt) {
+    rows.push({ label: 'Confirmed On', value: formatDate(subscription.confirmedAt) });
+  }
+
+  if (subscription.startDate) {
+    rows.push({ label: 'Start Date', value: formatDate(subscription.startDate) });
+  }
+
+  if (subscription.nextInvoiceDate) {
+    rows.push({ label: 'Next Invoice', value: formatDate(subscription.nextInvoiceDate) });
+  }
+
+  rows.push({
+    label: 'Expiration Date',
+    value: subscription.expirationDate ? formatDate(subscription.expirationDate) : 'No end date',
+  });
+
+  return rows;
+}
+
+function formatSubscriptionSource(sourceChannel: string | null | undefined) {
+  if (!sourceChannel?.trim()) {
+    return '-';
+  }
+
+  const normalized = sourceChannel.trim().toLowerCase();
+
+  if (normalized === 'admin') {
+    return 'Backoffice';
+  }
+
+  if (normalized === 'portal') {
+    return 'Customer Portal';
+  }
+
+  return formatStatusLabel(normalized);
+}
+
+function textValue(value: string | null | undefined, fallback = '-') {
+  return value && value.trim() ? value : fallback;
 }
 
 function InvoiceMetaRow({
   icon,
   label,
-  value
+  value,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -804,7 +1038,9 @@ function InvoiceMetaRow({
     <div className="flex items-start gap-3 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] px-4 py-3">
       <div className="mt-0.5 text-[color:var(--color-primary-strong)]">{icon}</div>
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--color-text-muted)]">{label}</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--color-text-muted)]">
+          {label}
+        </p>
         <p className="mt-1 font-medium text-[color:var(--color-text-primary)]">{value}</p>
       </div>
     </div>
@@ -814,7 +1050,7 @@ function InvoiceMetaRow({
 function InvoicePrintRow({
   label,
   value,
-  strong = false
+  strong = false,
 }: {
   label: string;
   value: string;
@@ -838,13 +1074,13 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 }
 
 function AccountTabs({
-  active
+  active,
 }: Readonly<{
   active: 'profile' | 'orders';
 }>) {
   const tabs = [
     { id: 'profile' as const, label: 'Profile', to: '/account/profile' },
-    { id: 'orders' as const, label: 'Orders', to: '/account/orders' }
+    { id: 'orders' as const, label: 'Orders', to: '/account/orders' },
   ];
 
   return (
@@ -876,10 +1112,9 @@ function EditableField({ children, label }: { children: React.ReactNode; label: 
 }
 
 function resolveSubscriptionLineImage(line: Subscription['lines'][number]) {
-  const candidateUrls = [
-    ...(line.product?.imageUrls ?? []),
-    line.product?.imageUrl ?? null
-  ].filter((value): value is string => Boolean(value));
+  const candidateUrls = [...(line.product?.imageUrls ?? []), line.product?.imageUrl ?? null].filter(
+    (value): value is string => Boolean(value),
+  );
 
   return candidateUrls[0] ?? null;
 }
@@ -887,7 +1122,7 @@ function resolveSubscriptionLineImage(line: Subscription['lines'][number]) {
 function PaginationControls({
   currentPage,
   onPageChange,
-  totalPages
+  totalPages,
 }: Readonly<{
   currentPage: number;
   onPageChange: (page: number) => void;

@@ -40,6 +40,61 @@ const priceRanges: readonly PriceRangeOption[] = [
   { key: '3000-plus', label: 'Rs.3,000+', minPrice: 3000, maxPrice: undefined }
 ] as const;
 
+const productImageFallbacks = new Map<string, string[]>([
+  [
+    'growth subscription',
+    [
+      createSubscriptionFallbackImage({
+        accent: '#0f766e',
+        background: '#ecfeff',
+        badge: 'Growth',
+        title: 'Expanded billing automation',
+        subtitle: 'Revenue visibility for scaling teams',
+        price: 'Rs.2,499 / month'
+      })
+    ]
+  ],
+  [
+    'starter subscription',
+    [
+      createSubscriptionFallbackImage({
+        accent: '#2563eb',
+        background: '#eff6ff',
+        badge: 'Starter',
+        title: 'Core subscription billing',
+        subtitle: 'Built for early-stage teams',
+        price: 'SaaS subscriptions'
+      })
+    ]
+  ],
+  [
+    'growth-subscription',
+    [
+      createSubscriptionFallbackImage({
+        accent: '#0f766e',
+        background: '#ecfeff',
+        badge: 'Growth',
+        title: 'Expanded billing automation',
+        subtitle: 'Revenue visibility for scaling teams',
+        price: 'Rs.2,499 / month'
+      })
+    ]
+  ],
+  [
+    'starter-subscription',
+    [
+      createSubscriptionFallbackImage({
+        accent: '#2563eb',
+        background: '#eff6ff',
+        badge: 'Starter',
+        title: 'Core subscription billing',
+        subtitle: 'Built for early-stage teams',
+        price: 'SaaS subscriptions'
+      })
+    ]
+  ]
+]);
+
 type PriceRangeKey = PriceRangeOption['key'];
 
 export function ShopPage() {
@@ -626,7 +681,82 @@ function productImages(product: Product) {
     (product.imageUrl.startsWith('data:image/') ||
       /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(product.imageUrl))
     ? [product.imageUrl]
-    : [];
+    : resolveProductImageFallback(product);
+}
+
+function resolveProductImageFallback(product: Product) {
+  const candidates = [product.slug, product.name].map((value) => value.trim().toLowerCase());
+
+  for (const candidate of candidates) {
+    const fallbackImages = productImageFallbacks.get(candidate);
+
+    if (fallbackImages?.length) {
+      return fallbackImages;
+    }
+  }
+
+  return [];
+}
+
+function createSubscriptionFallbackImage({
+  accent,
+  background,
+  badge,
+  title,
+  subtitle,
+  price
+}: Readonly<{
+  accent: string;
+  background: string;
+  badge: string;
+  title: string;
+  subtitle: string;
+  price: string;
+}>) {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-label="${badge} subscription">
+      <defs>
+        <linearGradient id="panel" x1="0%" x2="100%" y1="0%" y2="100%">
+          <stop offset="0%" stop-color="${background}" />
+          <stop offset="100%" stop-color="#ffffff" />
+        </linearGradient>
+        <linearGradient id="glow" x1="0%" x2="100%" y1="0%" y2="100%">
+          <stop offset="0%" stop-color="${accent}" stop-opacity="0.95" />
+          <stop offset="100%" stop-color="#0f172a" stop-opacity="0.95" />
+        </linearGradient>
+      </defs>
+      <rect width="1200" height="900" fill="url(#panel)" rx="48" />
+      <circle cx="982" cy="184" r="170" fill="${accent}" fill-opacity="0.1" />
+      <circle cx="1090" cy="110" r="72" fill="${accent}" fill-opacity="0.18" />
+      <circle cx="148" cy="774" r="116" fill="${accent}" fill-opacity="0.12" />
+      <rect x="72" y="78" width="520" height="72" rx="36" fill="${accent}" fill-opacity="0.12" />
+      <text x="108" y="123" fill="${accent}" font-family="Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" letter-spacing="6">
+        ${badge.toUpperCase()}
+      </text>
+      <text x="84" y="270" fill="#0f172a" font-family="Segoe UI, Arial, sans-serif" font-size="84" font-weight="800">
+        ${title}
+      </text>
+      <text x="84" y="344" fill="#334155" font-family="Segoe UI, Arial, sans-serif" font-size="38">
+        ${subtitle}
+      </text>
+      <rect x="84" y="418" width="470" height="280" rx="36" fill="#ffffff" stroke="#dbeafe" stroke-width="3" />
+      <rect x="116" y="462" width="406" height="26" rx="13" fill="#e2e8f0" />
+      <rect x="116" y="514" width="286" height="26" rx="13" fill="#cbd5e1" />
+      <rect x="116" y="588" width="252" height="72" rx="24" fill="${accent}" />
+      <text x="152" y="635" fill="#ffffff" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700">
+        ${price}
+      </text>
+      <rect x="704" y="228" width="378" height="414" rx="44" fill="url(#glow)" />
+      <rect x="760" y="300" width="270" height="22" rx="11" fill="#ffffff" fill-opacity="0.28" />
+      <rect x="760" y="350" width="206" height="22" rx="11" fill="#ffffff" fill-opacity="0.18" />
+      <rect x="760" y="454" width="120" height="120" rx="28" fill="#ffffff" fill-opacity="0.12" />
+      <rect x="910" y="454" width="120" height="120" rx="28" fill="#ffffff" fill-opacity="0.24" />
+      <path d="M792 552c34-84 78-136 134-156 58-22 110-16 156 18" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-width="18" />
+      <circle cx="1088" cy="190" r="18" fill="${accent}" />
+    </svg>
+  `;
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 function productVariants(product: Product) {

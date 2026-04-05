@@ -52,8 +52,7 @@ export function PortalLayout() {
                 src="/veltrix-logo.png"
               />
               <div className="hidden sm:block">
-                <p className="text-sm font-semibold tracking-[-0.03em]">Veltrix</p>
-                <p className="text-xs text-slate-500">External user space</p>
+                <p className="text-sm font-bold tracking-[-0.03em]">Veltrix</p>
               </div>
             </Link>
 

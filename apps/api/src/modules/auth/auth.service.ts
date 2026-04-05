@@ -28,7 +28,7 @@ function validateJwtTtl(value: string): SignOptions['expiresIn'] {
 function issueAccessToken(user: SessionUser) {
   const options: SignOptions = {
     subject: user.id,
-    expiresIn: validateJwtTtl(env.ACCESS_TOKEN_TTL)
+    expiresIn: validateJwtTtl(env.ACCESS_TOKEN_TTL),
   };
 
   return jwt.sign({ email: user.email, role: user.role }, env.JWT_ACCESS_SECRET, options);
@@ -37,7 +37,7 @@ function issueAccessToken(user: SessionUser) {
 function issueRefreshToken(user: SessionUser) {
   const options: SignOptions = {
     subject: user.id,
-    expiresIn: validateJwtTtl(env.REFRESH_TOKEN_TTL)
+    expiresIn: validateJwtTtl(env.REFRESH_TOKEN_TTL),
   };
 
   return jwt.sign({ email: user.email, role: user.role }, env.JWT_REFRESH_SECRET, options);
@@ -60,11 +60,11 @@ async function revokeAllRefreshTokens(userId: string) {
   await prisma.refreshToken.updateMany({
     where: {
       userId,
-      revokedAt: null
+      revokedAt: null,
     },
     data: {
-      revokedAt: new Date()
-    }
+      revokedAt: new Date(),
+    },
   });
 }
 
@@ -73,8 +73,8 @@ async function persistRefreshToken(userId: string, refreshToken: string) {
     data: {
       userId,
       tokenHash: hashToken(refreshToken),
-      expiresAt: getTokenExpiry(refreshToken)
-    }
+      expiresAt: getTokenExpiry(refreshToken),
+    },
   });
 }
 
@@ -88,16 +88,21 @@ async function createSessionTokens(user: SessionUser) {
   return {
     accessToken,
     refreshToken,
-    user
+    user,
   };
 }
 
-function toSessionUser(user: { id: string; email: string; name: string | null; role: UserRole }): SessionUser {
+function toSessionUser(user: {
+  id: string;
+  email: string;
+  name: string | null;
+  role: UserRole;
+}): SessionUser {
   return {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: user.role
+    role: user.role,
   };
 }
 
@@ -111,7 +116,7 @@ async function createPortalUser(input: { email: string; password: string; name: 
         passwordHash,
         role: UserRole.portal_user,
         name: input.name,
-      }
+      },
     });
 
     const contact = await tx.contact.create({
@@ -121,36 +126,14 @@ async function createPortalUser(input: { email: string; password: string; name: 
         name: input.name,
         email: user.email,
         isDefault: true,
-        addresses: {
-          create: [
-            {
-              type: 'billing',
-              line1: 'Default Billing Address',
-              city: 'Unknown',
-              state: 'Unknown',
-              postalCode: '000000',
-              country: 'India',
-              isDefault: true
-            },
-            {
-              type: 'shipping',
-              line1: 'Default Shipping Address',
-              city: 'Unknown',
-              state: 'Unknown',
-              postalCode: '000000',
-              country: 'India',
-              isDefault: true
-            }
-          ]
-        }
-      }
+      },
     });
 
     await tx.user.update({
       where: { id: user.id },
       data: {
-        defaultContactId: contact.id
-      }
+        defaultContactId: contact.id,
+      },
     });
 
     return user;
@@ -178,7 +161,7 @@ export async function signup(input: unknown) {
   const payload = signupSchema.parse(input);
 
   const existingUser = await prisma.user.findUnique({
-    where: { email: payload.email.toLowerCase() }
+    where: { email: payload.email.toLowerCase() },
   });
 
   if (existingUser) {
@@ -194,14 +177,14 @@ export async function signup(input: unknown) {
     where: { id: user.id },
     data: {
       verificationCode: otp,
-      verificationExpiresAt: otpExpiresAt
-    }
+      verificationExpiresAt: otpExpiresAt,
+    },
   });
 
   await mailer.sendOtp(user.email, otp);
 
   return {
-    message: 'Verification code sent to your email.'
+    message: 'Verification code sent to your email.',
   };
 }
 
@@ -209,7 +192,7 @@ export async function login(input: unknown) {
   const payload = loginSchema.parse(input);
 
   const user = await prisma.user.findUnique({
-    where: { email: payload.email.toLowerCase() }
+    where: { email: payload.email.toLowerCase() },
   });
 
   if (!user) {
@@ -231,7 +214,7 @@ export async function login(input: unknown) {
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { lastLoginAt: new Date() }
+    data: { lastLoginAt: new Date() },
   });
 
   return createSessionTokens(toSessionUser(user));
@@ -255,12 +238,12 @@ export async function refreshSession(refreshToken: string) {
       tokenHash,
       revokedAt: null,
       expiresAt: {
-        gt: new Date()
-      }
+        gt: new Date(),
+      },
     },
     include: {
-      user: true
-    }
+      user: true,
+    },
   });
 
   if (!storedToken || !storedToken.user.isActive) {
@@ -269,7 +252,7 @@ export async function refreshSession(refreshToken: string) {
 
   await prisma.refreshToken.update({
     where: { id: storedToken.id },
-    data: { revokedAt: new Date() }
+    data: { revokedAt: new Date() },
   });
 
   return createSessionTokens(toSessionUser(storedToken.user));
@@ -283,11 +266,11 @@ export async function logout(refreshToken?: string) {
   await prisma.refreshToken.updateMany({
     where: {
       tokenHash: hashToken(refreshToken),
-      revokedAt: null
+      revokedAt: null,
     },
     data: {
-      revokedAt: new Date()
-    }
+      revokedAt: new Date(),
+    },
   });
 }
 
@@ -296,7 +279,7 @@ export async function requestPasswordReset(input: unknown) {
   const email = payload.email.trim().toLowerCase();
 
   const user = await prisma.user.findUnique({
-    where: { email }
+    where: { email },
   });
 
   if (!user) {
@@ -304,7 +287,11 @@ export async function requestPasswordReset(input: unknown) {
   }
 
   if (isProtectedAdminAccount(user)) {
-    throw new AppError('Password reset is disabled for the system admin account', 403, 'PASSWORD_RESET_DISABLED');
+    throw new AppError(
+      'Password reset is disabled for the system admin account',
+      403,
+      'PASSWORD_RESET_DISABLED',
+    );
   }
 
   const rawToken = randomBytes(32).toString('hex');
@@ -315,27 +302,29 @@ export async function requestPasswordReset(input: unknown) {
     where: { id: user.id },
     data: {
       resetPasswordTokenHash: hashToken(rawToken),
-      resetPasswordExpiresAt: expiresAt
-    }
+      resetPasswordExpiresAt: expiresAt,
+    },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'user',
-      entityId: user.id,
-      action: 'password_reset_requested',
-      newValuesJson: {
-        expiresAt: expiresAt.toISOString()
-      }
-    }
-  }).catch(() => undefined);
+  await prisma.auditLog
+    .create({
+      data: {
+        entityType: 'user',
+        entityId: user.id,
+        action: 'password_reset_requested',
+        newValuesJson: {
+          expiresAt: expiresAt.toISOString(),
+        },
+      },
+    })
+    .catch(() => undefined);
 
   // Send the actual email with professional template
   await mailer.sendPasswordReset(user.email, resetLink);
 
   return {
     message: 'The password reset link has been sent to your email.',
-    resetLink: shouldExposeResetLink() ? resetLink : undefined
+    resetLink: shouldExposeResetLink() ? resetLink : undefined,
   };
 }
 
@@ -344,7 +333,7 @@ export async function verifyOtp(input: unknown) {
   const email = payload.email.toLowerCase();
 
   const user = await prisma.user.findUnique({
-    where: { email }
+    where: { email },
   });
 
   if (!user) {
@@ -355,7 +344,11 @@ export async function verifyOtp(input: unknown) {
     return createSessionTokens(toSessionUser(user));
   }
 
-  if (user.verificationCode !== payload.otp || !user.verificationExpiresAt || user.verificationExpiresAt < new Date()) {
+  if (
+    user.verificationCode !== payload.otp ||
+    !user.verificationExpiresAt ||
+    user.verificationExpiresAt < new Date()
+  ) {
     throw new AppError('Invalid or expired verification code', 400, 'INVALID_CODE');
   }
 
@@ -364,8 +357,8 @@ export async function verifyOtp(input: unknown) {
     data: {
       emailVerifiedAt: new Date(),
       verificationCode: null,
-      verificationExpiresAt: null
-    }
+      verificationExpiresAt: null,
+    },
   });
 
   return createSessionTokens(toSessionUser(user));
@@ -376,7 +369,7 @@ export async function resendOtp(input: unknown) {
   const email = payload.email.toLowerCase();
 
   const user = await prisma.user.findUnique({
-    where: { email }
+    where: { email },
   });
 
   if (!user) {
@@ -394,14 +387,14 @@ export async function resendOtp(input: unknown) {
     where: { id: user.id },
     data: {
       verificationCode: otp,
-      verificationExpiresAt: otpExpiresAt
-    }
+      verificationExpiresAt: otpExpiresAt,
+    },
   });
 
   await mailer.sendOtp(user.email, otp);
 
   return {
-    message: 'New verification code sent to your email.'
+    message: 'New verification code sent to your email.',
   };
 }
 
@@ -413,9 +406,9 @@ export async function confirmPasswordReset(input: unknown) {
     where: {
       resetPasswordTokenHash: tokenHash,
       resetPasswordExpiresAt: {
-        gt: new Date()
-      }
-    }
+        gt: new Date(),
+      },
+    },
   });
 
   if (!user) {
@@ -423,7 +416,11 @@ export async function confirmPasswordReset(input: unknown) {
   }
 
   if (isProtectedAdminAccount(user)) {
-    throw new AppError('Password reset is disabled for the system admin account', 403, 'PASSWORD_RESET_DISABLED');
+    throw new AppError(
+      'Password reset is disabled for the system admin account',
+      403,
+      'PASSWORD_RESET_DISABLED',
+    );
   }
 
   const passwordHash = await argon2.hash(payload.password);
@@ -434,28 +431,28 @@ export async function confirmPasswordReset(input: unknown) {
       data: {
         passwordHash,
         resetPasswordTokenHash: null,
-        resetPasswordExpiresAt: null
-      }
+        resetPasswordExpiresAt: null,
+      },
     }),
     prisma.refreshToken.updateMany({
       where: {
         userId: user.id,
-        revokedAt: null
+        revokedAt: null,
       },
       data: {
-        revokedAt: new Date()
-      }
+        revokedAt: new Date(),
+      },
     }),
     prisma.auditLog.create({
       data: {
         entityType: 'user',
         entityId: user.id,
-        action: 'password_reset_completed'
-      }
-    })
+        action: 'password_reset_completed',
+      },
+    }),
   ]);
 
   return {
-    message: 'Password updated successfully.'
+    message: 'Password updated successfully.',
   };
 }
