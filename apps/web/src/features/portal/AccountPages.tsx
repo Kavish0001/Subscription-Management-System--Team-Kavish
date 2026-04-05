@@ -699,8 +699,24 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
                 {subscription.lines.map((line) => (
                   <tr key={line.id}>
                     <td>
-                      <p>{line.productNameSnapshot}</p>
-                      {line.variant?.name ? <p className="text-xs muted">{line.variant.name}</p> : null}
+                      <div className="flex items-center gap-3">
+                        {resolveSubscriptionLineImage(line) ? (
+                          <img
+                            alt={line.productNameSnapshot}
+                            className="h-14 w-14 rounded-2xl border border-[color:var(--color-border)] object-cover"
+                            loading="lazy"
+                            src={resolveSubscriptionLineImage(line) ?? undefined}
+                          />
+                        ) : (
+                          <div className="grid h-14 w-14 place-items-center rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">
+                            Item
+                          </div>
+                        )}
+                        <div>
+                          <p>{line.productNameSnapshot}</p>
+                          {line.variant?.name ? <p className="text-xs muted">{line.variant.name}</p> : null}
+                        </div>
+                      </div>
                     </td>
                     <td>{line.quantity}</td>
                     <td>{formatCurrency(line.unitPrice)}</td>
@@ -857,6 +873,15 @@ function EditableField({ children, label }: { children: React.ReactNode; label: 
       {children}
     </label>
   );
+}
+
+function resolveSubscriptionLineImage(line: Subscription['lines'][number]) {
+  const candidateUrls = [
+    ...(line.product?.imageUrls ?? []),
+    line.product?.imageUrl ?? null
+  ].filter((value): value is string => Boolean(value));
+
+  return candidateUrls[0] ?? null;
 }
 
 function PaginationControls({

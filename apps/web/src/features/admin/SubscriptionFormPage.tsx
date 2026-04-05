@@ -308,6 +308,45 @@ export function SubscriptionFormPage() {
             value={notes}
           />
         </Field>
+        {selectedProduct ? (
+          <div className="app-card p-5 md:col-span-2">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              {resolveProductPreviewImage(selectedProduct) ? (
+                <img
+                  alt={selectedProduct.name}
+                  className="h-28 w-full rounded-[24px] border border-[color:var(--color-border)] object-cover sm:w-40"
+                  loading="lazy"
+                  src={resolveProductPreviewImage(selectedProduct) ?? undefined}
+                />
+              ) : (
+                <div className="grid h-28 w-full place-items-center rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--color-text-muted)] sm:w-40">
+                  Product
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">
+                  <span className="rounded-full bg-[color:var(--color-card-muted)] px-3 py-1">
+                    {selectedProduct.productType}
+                  </span>
+                  {selectedProduct.category?.name ? (
+                    <span className="rounded-full bg-[color:var(--color-card-muted)] px-3 py-1">
+                      {selectedProduct.category.name}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-3 text-lg font-semibold text-[color:var(--color-text-primary)]">
+                  {selectedProduct.name}
+                </p>
+                <p className="mt-2 text-sm muted">
+                  {selectedProduct.description ?? 'Seeded catalog product ready for subscription creation.'}
+                </p>
+                <p className="mt-3 text-sm font-semibold text-[color:var(--color-text-primary)]">
+                  {formatCurrency(unitPrice)} per billing cycle
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="app-soft-panel p-5 md:col-span-2">
           <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">
             Estimated total with tax: {formatCurrency(unitPrice * quantity * 1.18)}
@@ -420,4 +459,13 @@ function Field({ children, label }: { children: React.ReactNode; label: string }
       {children}
     </label>
   );
+}
+
+function resolveProductPreviewImage(product: Product) {
+  const mediaImage = product.media?.find((entry) => entry.type === 'image')?.url;
+  const candidateUrls = [mediaImage ?? null, ...(product.imageUrls ?? []), product.imageUrl ?? null].filter(
+    (value): value is string => Boolean(value),
+  );
+
+  return candidateUrls[0] ?? null;
 }

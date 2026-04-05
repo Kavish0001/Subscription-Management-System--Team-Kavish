@@ -99,6 +99,8 @@ export function AttributeListPage() {
     return (attributesQuery.data ?? []).filter((entry) => !normalizedSearch || entry.name.toLowerCase().includes(normalizedSearch));
   }, [attributesQuery.data, search]);
 
+  const createValidationError = validateAttributeDraft(name, values);
+
   return (
     <Surface title="Attributes" description="Create reusable product attributes and the extra-price values that products can use as variants.">
       {error ? <Message error={error} /> : null}
@@ -109,11 +111,24 @@ export function AttributeListPage() {
             <input className={fieldClass} onChange={(event) => setName(event.target.value)} value={name} />
           </Field>
           <div className="flex items-end justify-end">
-            <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => createMutation.mutate()} type="button">
-              New
+            <button
+              className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={createMutation.isPending}
+              onClick={() => {
+                if (createValidationError) {
+                  setError(createValidationError);
+                  return;
+                }
+
+                createMutation.mutate();
+              }}
+              type="button"
+            >
+              {createMutation.isPending ? 'Saving...' : 'Save Attribute'}
             </button>
           </div>
         </div>
+        <p className="mt-3 text-xs text-slate-400">Use a unique attribute name and add at least one active value.</p>
         <div className="mt-5 rounded-[24px] border border-white/10 bg-slate-950/25 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-slate-200">Attribute values</p>
@@ -241,6 +256,8 @@ export function PaymentTermListPage() {
     return (paymentTermsQuery.data ?? []).filter((entry) => !normalizedSearch || entry.name.toLowerCase().includes(normalizedSearch));
   }, [paymentTermsQuery.data, search]);
 
+  const createValidationError = validatePaymentTermDraft(name, dueDays);
+
   return (
     <Surface title="Payment Terms" description="Reusable payment-term labels for quotations and subscriptions.">
       {error ? <Message error={error} /> : null}
@@ -258,8 +275,20 @@ export function PaymentTermListPage() {
           </Field>
         </div>
         <div className="mt-4">
-          <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => createMutation.mutate()} type="button">
-            New
+          <button
+            className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={createMutation.isPending}
+            onClick={() => {
+              if (createValidationError) {
+                setError(createValidationError);
+                return;
+              }
+
+              createMutation.mutate();
+            }}
+            type="button"
+          >
+            {createMutation.isPending ? 'Saving...' : 'Save Payment Term'}
           </button>
         </div>
       </div>
@@ -389,6 +418,16 @@ export function QuotationTemplateListPage() {
     );
   }, [search, templatesQuery.data]);
 
+  const createValidationError = validateQuotationTemplateDraft({
+    name,
+    validityDays,
+    paymentTermLabel,
+    isLastForever,
+    durationCount,
+    durationUnit,
+    lines
+  });
+
   return (
     <Surface title="Quotation Templates" description="Save reusable quotation setups with validity, plan defaults, lifecycle duration, and product lines.">
       {error ? <Message error={error} /> : null}
@@ -507,8 +546,20 @@ export function QuotationTemplateListPage() {
           </div>
         </div>
         <div className="mt-4">
-          <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950" onClick={() => createMutation.mutate()} type="button">
-            New
+          <button
+            className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={createMutation.isPending}
+            onClick={() => {
+              if (createValidationError) {
+                setError(createValidationError);
+                return;
+              }
+
+              createMutation.mutate();
+            }}
+            type="button"
+          >
+            {createMutation.isPending ? 'Saving...' : 'Save Template'}
           </button>
         </div>
       </div>
@@ -591,4 +642,86 @@ function Field({ children, className, label }: { children: ReactNode; className?
 
 function Message({ error }: { error: string }) {
   return <p className="mb-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p>;
+}
+
+function validateAttributeDraft(name: string, values: AttributeValueDraft[]) {
+  if (!name.trim()) {
+    return 'Attribute name is required';
+  }
+
+  const activeValues = values.filter((entry) => entry.value.trim());
+  if (activeValues.length === 0) {
+    return 'Add at least one attribute value';
+  }
+
+  const keys = new Set<string>();
+  for (const entry of activeValues) {
+    const normalized = entry.value.trim().toLowerCase();
+    if (keys.has(normalized)) {
+      return 'Duplicate attribute values are not allowed';
+    }
+
+    if (Number.isNaN(Number(entry.extraPrice)) || Number(entry.extraPrice) < 0) {
+      return 'Default extra price must be a valid non-negative amount';
+    }
+
+    keys.add(normalized);
+  }
+
+  return null;
+}
+
+function validatePaymentTermDraft(name: string, dueDays: string) {
+  if (!name.trim()) {
+    return 'Payment term name is required';
+  }
+
+  if (Number.isNaN(Number(dueDays)) || Number(dueDays) < 0) {
+    return 'Due days must be a valid non-negative number';
+  }
+
+  return null;
+}
+
+function validateQuotationTemplateDraft(input: {
+  name: string;
+  validityDays: string;
+  paymentTermLabel: string;
+  isLastForever: boolean;
+  durationCount: string;
+  durationUnit: 'week' | 'month' | 'year';
+  lines: TemplateLineDraft[];
+}) {
+  if (!input.name.trim()) {
+    return 'Template name is required';
+  }
+
+  if (Number.isNaN(Number(input.validityDays)) || Number(input.validityDays) < 1) {
+    return 'Quotation validity must be at least 1 day';
+  }
+
+  if (!input.paymentTermLabel.trim()) {
+    return 'Payment term is required';
+  }
+
+  if (!input.isLastForever && (Number.isNaN(Number(input.durationCount)) || Number(input.durationCount) < 1)) {
+    return `End-after duration is required in ${input.durationUnit}(s)`;
+  }
+
+  const activeLines = input.lines.filter((line) => line.productId);
+  if (activeLines.length === 0) {
+    return 'Add at least one product line';
+  }
+
+  for (const line of activeLines) {
+    if (Number.isNaN(Number(line.quantity)) || Number(line.quantity) < 1) {
+      return 'Line quantity must be at least 1';
+    }
+
+    if (Number.isNaN(Number(line.unitPrice)) || Number(line.unitPrice) < 0) {
+      return 'Line unit price must be a valid non-negative amount';
+    }
+  }
+
+  return null;
 }

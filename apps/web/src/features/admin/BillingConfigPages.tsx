@@ -112,6 +112,8 @@ export function RecurringPlanListPage() {
     return (plansQuery.data ?? []).filter((entry) => !normalizedSearch || entry.name.toLowerCase().includes(normalizedSearch));
   }, [plansQuery.data, search]);
 
+  const createValidationError = validateRecurringPlanDraft(form);
+
   return (
     <Surface title="Recurring Plans" description="Set billing cadence, quantity rules, lifecycle capabilities, and automatic close windows.">
       {error ? <Message error={error} /> : null}
@@ -161,8 +163,20 @@ export function RecurringPlanListPage() {
         <ToggleCard checked={form.isClosable} label="Closable" onChange={(checked) => setForm((value) => ({ ...value, isClosable: checked }))} />
         <ToggleCard checked={form.isPausable} label="Pausable" onChange={(checked) => setForm((value) => ({ ...value, isPausable: checked }))} />
         <ToggleCard checked={form.isRenewable} label="Renewable" onChange={(checked) => setForm((value) => ({ ...value, isRenewable: checked }))} />
-        <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 xl:justify-self-start" onClick={() => createMutation.mutate()} type="button">
-          New
+        <button
+          className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60 xl:justify-self-start"
+          disabled={createMutation.isPending}
+          onClick={() => {
+            if (createValidationError) {
+              setError(createValidationError);
+              return;
+            }
+
+            createMutation.mutate();
+          }}
+          type="button"
+        >
+          {createMutation.isPending ? 'Saving...' : 'Save Plan'}
         </button>
       </div>
       <DataTable
@@ -307,6 +321,8 @@ export function DiscountListPage() {
     );
   }, [discountsQuery.data, search]);
 
+  const createValidationError = validateDiscountDraft(form);
+
   return (
     <Surface title="Discounts" description="Admin-only discount rules with value type, eligibility thresholds, dates, limited usage, and optional product targeting.">
       {error ? <Message error={error} /> : null}
@@ -380,8 +396,20 @@ export function DiscountListPage() {
             </div>
           </div>
         ) : null}
-        <button className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 xl:justify-self-start" onClick={() => createMutation.mutate()} type="button">
-          New
+        <button
+          className="rounded-full bg-gradient-to-r from-amber-300 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60 xl:justify-self-start"
+          disabled={createMutation.isPending}
+          onClick={() => {
+            if (createValidationError) {
+              setError(createValidationError);
+              return;
+            }
+
+            createMutation.mutate();
+          }}
+          type="button"
+        >
+          {createMutation.isPending ? 'Saving...' : 'Save Discount'}
         </button>
       </div>
       <DataTable
@@ -475,4 +503,84 @@ function DataTable({ columns, rows }: { columns: string[]; rows: React.ReactNode
 
 function Message({ error }: { error: string }) {
   return <p className="mb-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</p>;
+}
+
+function validateRecurringPlanDraft(form: {
+  name: string;
+  intervalCount: string;
+  price: string;
+  minimumQuantity: string;
+  startDate: string;
+  endDate: string;
+  autoCloseEnabled: boolean;
+  autoCloseAfterCount: string;
+}) {
+  if (!form.name.trim()) {
+    return 'Recurring name is required';
+  }
+
+  if (Number.isNaN(Number(form.intervalCount)) || Number(form.intervalCount) < 1) {
+    return 'Billing period count must be at least 1';
+  }
+
+  if (Number.isNaN(Number(form.price)) || Number(form.price) < 0) {
+    return 'Price must be a valid non-negative amount';
+  }
+
+  if (Number.isNaN(Number(form.minimumQuantity)) || Number(form.minimumQuantity) < 1) {
+    return 'Minimum quantity must be at least 1';
+  }
+
+  if (form.startDate && form.endDate && form.endDate < form.startDate) {
+    return 'End date cannot be before start date';
+  }
+
+  if (form.autoCloseEnabled && (Number.isNaN(Number(form.autoCloseAfterCount)) || Number(form.autoCloseAfterCount) < 1)) {
+    return 'Auto-close duration is required when automatic close is enabled';
+  }
+
+  return null;
+}
+
+function validateDiscountDraft(form: {
+  name: string;
+  value: string;
+  minimumPurchase: string;
+  minimumQuantity: string;
+  startDate: string;
+  endDate: string;
+  limitUsageEnabled: boolean;
+  usageLimit: string;
+  scopeType: 'all_products' | 'selected_products' | 'subscriptions';
+  productIds: string[];
+}) {
+  if (!form.name.trim()) {
+    return 'Discount name is required';
+  }
+
+  if (Number.isNaN(Number(form.value)) || Number(form.value) < 0) {
+    return 'Discount value must be a valid non-negative amount';
+  }
+
+  if (Number.isNaN(Number(form.minimumPurchase)) || Number(form.minimumPurchase) < 0) {
+    return 'Minimum purchase must be a valid non-negative amount';
+  }
+
+  if (Number.isNaN(Number(form.minimumQuantity)) || Number(form.minimumQuantity) < 1) {
+    return 'Minimum quantity must be at least 1';
+  }
+
+  if (form.startDate && form.endDate && form.endDate < form.startDate) {
+    return 'End date cannot be before start date';
+  }
+
+  if (form.limitUsageEnabled && (Number.isNaN(Number(form.usageLimit)) || Number(form.usageLimit) < 1)) {
+    return 'Usage limit is required when limited usage is enabled';
+  }
+
+  if (form.scopeType === 'selected_products' && form.productIds.length === 0) {
+    return 'Select at least one product for a product-specific discount';
+  }
+
+  return null;
 }

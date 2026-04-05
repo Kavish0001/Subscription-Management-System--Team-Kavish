@@ -40,10 +40,13 @@ export function errorHandler(
   void _next;
 
   if (error instanceof ZodError) {
+    const firstIssue = error.issues[0]?.message;
+
     return response.status(400).json({
       error: {
-        message: 'Validation failed',
-        issues: error.flatten()
+        message: firstIssue ?? 'Validation failed',
+        code: 'VALIDATION_ERROR',
+        details: error.flatten()
       }
     });
   }
