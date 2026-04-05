@@ -1,0 +1,407 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  internal_user
+  portal_user
+}
+
+enum AddressType {
+  billing
+  shipping
+}
+
+enum ProductType {
+  goods
+  service
+}
+
+enum IntervalUnit {
+  day
+  week
+  month
+  year
+}
+
+enum DiscountType {
+  fixed
+  percentage
+}
+
+enum DiscountScope {
+  all_products
+  selected_products
+  subscriptions
+}
+
+enum DueType {
+  percent
+  fixed
+}
+
+enum SubscriptionStatus {
+  draft
+  quotation_sent
+  confirmed
+  active
+  paused
+  closed
+}
+
+enum InvoiceStatus {
+  draft
+  confirmed
+  paid
+  overdue
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+}
+
+model User {
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  passwordHash           String
+  role                   Role      @default(portal_user)
+  resetPasswordTokenHash String?
+  resetPasswordExpiresAt DateTime?
+  isEmailVerified        Boolean   @default(false)
+  emailVerifyTokenHash   String?
+  isActive               Boolean   @default(true)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  contacts               Contact[]
+}
+
+model Contact {
+  id                 String              @id @default(cuid())
+  userId             String?
+  name               String
+  email              String?
+  phone              String?
+  isDefault          Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  user               User?               @relation(fields: [userId], references: [id])
+  addresses          Address[]
+  subscriptionOrders SubscriptionOrder[]
+  invoices           Invoice[]
+}
+
+model Address {
+  id         String      @id @default(cuid())
+  contactId  String
+  type       AddressType
+  line1      String
+  line2      String?
+  city       String
+  state      String?
+  postalCode String?
+  country    String      @default("India")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  contact    Contact     @relation(fields: [contactId], references: [id])
+}
+
+model ProductCategory {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+model ProductAttribute {
+  id          String                  @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  values      ProductAttributeValue[]
+}
+
+model ProductAttributeValue {
+  id            String                @id @default(cuid())
+  attributeId   String
+  value         String
+  extraPrice    Decimal               @default(0) @db.Decimal(10, 2)
+  attribute     ProductAttribute      @relation(fields: [attributeId], references: [id])
+  variantValues ProductVariantValue[]
+}
+
+model Product {
+  id               String                @id @default(cuid())
+  name             String
+  slug             String                @unique
+  description      String?
+  productType      ProductType           @default(service)
+  baseSalesPrice   Decimal               @db.Decimal(10, 2)
+  costPrice        Decimal               @default(0) @db.Decimal(10, 2)
+  categoryId       String?
+  isActive         Boolean               @default(true)
+  imageUrl         String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  category         ProductCategory?      @relation(fields: [categoryId], references: [id])
+  variants         ProductVariant[]
+  planPricing      ProductPlanPricing[]
+  taxRules         ProductTaxRule[]
+  discountProducts DiscountRuleProduct[]
+  templateLines    QuotationTemplateLine[]
+  orderLines       SubscriptionOrderLine[]
+}
+
+model ProductVariant {
+  id            String                  @id @default(cuid())
+  productId     String
+  createdAt     DateTime                @default(now())
+  product       Product                 @relation(fields: [productId], references: [id])
+  values        ProductVariantValue[]
+  templateLines QuotationTemplateLine[]
+}
+
+model ProductVariantValue {
+  id               String                @id @default(cuid())
+  variantId        String
+  attributeValueId String
+  variant          ProductVariant        @relation(fields: [variantId], references: [id])
+  attributeValue   ProductAttributeValue @relation(fields: [attributeValueId], references: [id])
+}
+
+model RecurringPlan {
+  id              String               @id @default(cuid())
+  name            String
+  price           Decimal              @db.Decimal(10, 2)
+  intervalCount   Int                  @default(1)
+  intervalUnit    IntervalUnit         @default(month)
+  minimumQuantity Int                  @default(1)
+  isAutoClose     Boolean              @default(false)
+  autoCloseCount  Int?
+  autoCloseUnit   IntervalUnit?
+  isClosable      Boolean              @default(false)
+  isPausable      Boolean              @default(false)
+  isRenewable     Boolean              @default(false)
+  startDate       DateTime?
+  endDate         DateTime?
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  planPricing     ProductPlanPricing[]
+  subscriptions   SubscriptionOrder[]
+  templates       QuotationTemplate[]
+}
+
+model ProductPlanPricing {
+  id              String        @id @default(cuid())
+  productId       String
+  recurringPlanId String
+  price           Decimal       @db.Decimal(10, 2)
+  minimumQuantity Int           @default(1)
+  startDate       DateTime?
+  endDate         DateTime?
+  product         Product       @relation(fields: [productId], references: [id])
+  recurringPlan   RecurringPlan @relation(fields: [recurringPlanId], references: [id])
+}
+
+model TaxRule {
+  id             String                     @id @default(cuid())
+  name           String
+  ratePercent    Decimal                    @db.Decimal(5, 2)
+  taxType        String                     @default("GST")
+  isInclusive    Boolean                    @default(false)
+  isActive       Boolean                    @default(true)
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  products       ProductTaxRule[]
+  orderLineTaxes SubscriptionOrderLineTax[]
+}
+
+model ProductTaxRule {
+  id        String  @id @default(cuid())
+  productId String
+  taxRuleId String
+  product   Product @relation(fields: [productId], references: [id])
+  taxRule   TaxRule @relation(fields: [taxRuleId], references: [id])
+}
+
+model DiscountRule {
+  id              String               @id @default(cuid())
+  name            String
+  code            String               @unique
+  type            DiscountType
+  value           Decimal              @db.Decimal(10, 2)
+  minimumPurchase Decimal?             @db.Decimal(10, 2)
+  minimumQuantity Int?
+  startDate       DateTime?
+  endDate         DateTime?
+  usageLimit      Int?
+  usageCount      Int                  @default(0)
+  scopeType       DiscountScope        @default(all_products)
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  products        DiscountRuleProduct[]
+}
+
+model DiscountRuleProduct {
+  id             String       @id @default(cuid())
+  discountRuleId String
+  productId      String
+  discountRule   DiscountRule @relation(fields: [discountRuleId], references: [id])
+  product        Product      @relation(fields: [productId], references: [id])
+}
+
+model PaymentTerm {
+  id                String              @id @default(cuid())
+  name              String
+  earlyDiscount     Decimal?            @db.Decimal(5, 2)
+  earlyDiscountDays Int?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  lines             PaymentTermLine[]
+  subscriptions     SubscriptionOrder[]
+}
+
+model PaymentTermLine {
+  id            String      @id @default(cuid())
+  paymentTermId String
+  dueType       DueType
+  dueValue      Decimal     @db.Decimal(10, 2)
+  afterDays     Int         @default(0)
+  paymentTerm   PaymentTerm @relation(fields: [paymentTermId], references: [id])
+}
+
+model QuotationTemplate {
+  id               String                  @id @default(cuid())
+  name             String
+  validityDays     Int                     @default(30)
+  recurringPlanId  String?
+  paymentTermLabel String?
+  description      String?
+  isActive         Boolean                 @default(true)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  recurringPlan    RecurringPlan?          @relation(fields: [recurringPlanId], references: [id])
+  lines            QuotationTemplateLine[]
+  subscriptions    SubscriptionOrder[]
+}
+
+model QuotationTemplateLine {
+  id         String            @id @default(cuid())
+  templateId String
+  productId  String
+  variantId  String?
+  quantity   Decimal           @db.Decimal(10, 2)
+  unitPrice  Decimal           @db.Decimal(10, 2)
+  sortOrder  Int               @default(0)
+  template   QuotationTemplate @relation(fields: [templateId], references: [id])
+  product    Product           @relation(fields: [productId], references: [id])
+  variant    ProductVariant?   @relation(fields: [variantId], references: [id])
+}
+
+model SubscriptionOrder {
+  id                  String                  @id @default(cuid())
+  subscriptionNumber  String                  @unique
+  customerContactId   String
+  status              SubscriptionStatus      @default(draft)
+  recurringPlanId     String?
+  quotationTemplateId String?
+  paymentTermId       String?
+  totalAmount         Decimal                 @default(0) @db.Decimal(10, 2)
+  subtotal            Decimal                 @default(0) @db.Decimal(10, 2)
+  taxAmount           Decimal                 @default(0) @db.Decimal(10, 2)
+  discountAmount      Decimal                 @default(0) @db.Decimal(10, 2)
+  expirationDate      DateTime?
+  startDate           DateTime?
+  nextInvoiceDate     DateTime?
+  sourceChannel       String?
+  salesperson         String?
+  notes               String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  customerContact     Contact                 @relation(fields: [customerContactId], references: [id])
+  recurringPlan       RecurringPlan?          @relation(fields: [recurringPlanId], references: [id])
+  quotationTemplate   QuotationTemplate?      @relation(fields: [quotationTemplateId], references: [id])
+  paymentTerm         PaymentTerm?            @relation(fields: [paymentTermId], references: [id])
+  lines               SubscriptionOrderLine[]
+  invoices            Invoice[]
+}
+
+model SubscriptionOrderLine {
+  id                  String                     @id @default(cuid())
+  subscriptionOrderId String
+  productId           String
+  variantId           String?
+  productNameSnapshot String
+  quantity            Decimal                    @db.Decimal(10, 2)
+  unitPrice           Decimal                    @db.Decimal(10, 2)
+  discountAmount      Decimal                    @default(0) @db.Decimal(10, 2)
+  taxAmount           Decimal                    @default(0) @db.Decimal(10, 2)
+  lineTotal           Decimal                    @db.Decimal(10, 2)
+  subscriptionOrder   SubscriptionOrder          @relation(fields: [subscriptionOrderId], references: [id])
+  product             Product                    @relation(fields: [productId], references: [id])
+  taxes               SubscriptionOrderLineTax[]
+}
+
+model SubscriptionOrderLineTax {
+  id          String                @id @default(cuid())
+  orderLineId String
+  taxRuleId   String
+  ratePercent Decimal               @db.Decimal(5, 2)
+  amount      Decimal               @db.Decimal(10, 2)
+  orderLine   SubscriptionOrderLine @relation(fields: [orderLineId], references: [id])
+  taxRule     TaxRule               @relation(fields: [taxRuleId], references: [id])
+}
+
+model Invoice {
+  id                  String        @id @default(cuid())
+  invoiceNumber       String        @unique
+  subscriptionOrderId String?
+  contactId           String
+  status              InvoiceStatus @default(draft)
+  invoiceDate         DateTime      @default(now())
+  dueDate             DateTime?
+  subtotal            Decimal       @default(0) @db.Decimal(10, 2)
+  taxAmount           Decimal       @default(0) @db.Decimal(10, 2)
+  discountAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount         Decimal       @default(0) @db.Decimal(10, 2)
+  paymentTermLabel    String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  subscriptionOrder   SubscriptionOrder? @relation(fields: [subscriptionOrderId], references: [id])
+  contact             Contact       @relation(fields: [contactId], references: [id])
+  lines               InvoiceLine[]
+  payments            Payment[]
+}
+
+model InvoiceLine {
+  id                  String  @id @default(cuid())
+  invoiceId           String
+  productNameSnapshot String
+  quantity            Decimal @db.Decimal(10, 2)
+  unitPrice           Decimal @db.Decimal(10, 2)
+  taxAmount           Decimal @default(0) @db.Decimal(10, 2)
+  discountAmount      Decimal @default(0) @db.Decimal(10, 2)
+  lineTotal           Decimal @db.Decimal(10, 2)
+  invoice             Invoice @relation(fields: [invoiceId], references: [id])
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  invoiceId String
+  amount    Decimal       @db.Decimal(10, 2)
+  method    String        @default("mock")
+  status    PaymentStatus @default(pending)
+  paidAt    DateTime?
+  createdAt DateTime      @default(now())
+  invoice   Invoice       @relation(fields: [invoiceId], references: [id])
+}
