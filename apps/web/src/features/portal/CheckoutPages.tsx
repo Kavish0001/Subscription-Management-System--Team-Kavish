@@ -160,7 +160,7 @@ export function CartPage() {
             showDiscountInput={isAuthenticated}
             summary={displayedSummary}
             summaryError={isAuthenticated ? summaryError : null}
-            summaryLoading={isAuthenticated && summaryQuery.isPending}
+            summaryLoading={false}
             showDiscountEligibilityWarning={Boolean(summaryQuery.data)}
           />
         </div>
@@ -324,7 +324,7 @@ export function CheckoutAddressPage() {
             }
             summary={summaryQuery.data ?? localSummary}
             summaryError={summaryError}
-            summaryLoading={summaryQuery.isPending}
+            summaryLoading={false}
             showDiscountEligibilityWarning={Boolean(summaryQuery.data)}
           />
         </div>
@@ -351,6 +351,8 @@ export function CheckoutPaymentPage() {
 
   const paymentMutation = useMutation({
     mutationFn: async () => {
+      const lines = buildCheckoutRequestLines(items);
+
       const order = await apiRequest<RazorpayOrder>('/payments/razorpay/order', {
         token,
         method: 'POST',
@@ -358,12 +360,7 @@ export function CheckoutPaymentPage() {
           purpose: 'checkout',
           paymentMethod,
           discountCode: discountCode || undefined,
-          lines: items.map((item) => ({
-            productId: item.productId,
-            recurringPlanId: item.recurringPlanId,
-            variantId: item.variantId,
-            quantity: item.quantity
-          }))
+          lines
         })
       });
 
@@ -480,7 +477,7 @@ export function CheckoutPaymentPage() {
             }
             summary={summaryQuery.data ?? localSummary}
             summaryError={summaryError}
-            summaryLoading={summaryQuery.isPending}
+            summaryLoading={false}
             showDiscountEligibilityWarning={Boolean(summaryQuery.data)}
           />
         </div>
@@ -822,17 +819,13 @@ function useCheckoutSummary(token: string | null, enabled: boolean) {
   const discountCode = useCartStore((state) => state.discountCode);
   const removeProducts = useCartStore((state) => state.removeProducts);
   const [cartRecoveryMessage, setCartRecoveryMessage] = useState<string | null>(null);
+  const lines = useMemo(() => buildCheckoutRequestLines(items), [items]);
 
   const query = useQuery({
     queryKey: [
       'portal-checkout-summary',
       discountCode,
-      items.map((item) => ({
-        productId: item.productId,
-        recurringPlanId: item.recurringPlanId,
-        variantId: item.variantId ?? null,
-        quantity: item.quantity
-      }))
+      lines
     ],
     queryFn: () =>
       apiRequest<CheckoutSummary>('/checkout/summary', {
@@ -840,15 +833,13 @@ function useCheckoutSummary(token: string | null, enabled: boolean) {
         method: 'POST',
         body: JSON.stringify({
           discountCode: discountCode || undefined,
-          lines: items.map((item) => ({
-            productId: item.productId,
-            recurringPlanId: item.recurringPlanId,
-            variantId: item.variantId,
-            quantity: item.quantity
-          }))
+          lines
         })
       }),
-    enabled: enabled && items.length > 0
+    enabled: enabled && items.length > 0,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false
   });
 
   useEffect(() => {
@@ -912,6 +903,15 @@ function buildLocalCheckoutSummary(items: CartItem[], appliedDiscountCode?: stri
     appliedDiscountCode: appliedDiscountCode?.trim().toUpperCase() || null,
     hasDiscount: false
   };
+}
+
+function buildCheckoutRequestLines(items: CartItem[]) {
+  return items.map((item) => ({
+    productId: item.productId,
+    recurringPlanId: item.recurringPlanId,
+    ...(item.variantId ? { variantId: item.variantId } : {}),
+    quantity: item.quantity
+  }));
 }
 
 function resolveCheckoutSummaryError(

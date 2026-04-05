@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { CalendarRepeatIcon, CreditCardIcon, PrinterIcon, ReceiptIcon } from '../../components/icons';
+import { downloadSubscriptionPdf } from './orderPdf';
+import { CalendarRepeatIcon, CreditCardIcon, DownloadIcon, PrinterIcon, ReceiptIcon } from '../../components/icons';
 import { StatusBadge, Surface } from '../../components/layout';
 import { ApiError } from '../../lib/api';
 import {
@@ -180,6 +181,8 @@ export function ProfilePage() {
 export function OrdersPage() {
   const { token } = useSession();
   const [page, setPage] = useState(1);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadingOrderId, setDownloadingOrderId] = useState<string | null>(null);
   const subscriptionsQuery = useQuery({
     queryKey: ['portal-orders', page],
     queryFn: () =>
@@ -188,6 +191,23 @@ export function OrdersPage() {
   const orders = subscriptionsQuery.data?.items ?? [];
   const totalOrders = subscriptionsQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalOrders / ORDERS_PAGE_SIZE));
+
+  const handleDownloadPdf = async (subscriptionId: string) => {
+    try {
+      setDownloadError(null);
+      setDownloadingOrderId(subscriptionId);
+      const subscription = await apiRequest<Subscription>(`/subscriptions/${subscriptionId}`, { token });
+      await downloadSubscriptionPdf(subscription);
+    } catch (downloadErrorValue) {
+      setDownloadError(
+        downloadErrorValue instanceof ApiError || downloadErrorValue instanceof Error
+          ? downloadErrorValue.message
+          : 'Unable to download order PDF'
+      );
+    } finally {
+      setDownloadingOrderId(null);
+    }
+  };
 
   return (
     <Surface description="Review subscription orders, totals, and printable details." title="My Account">
@@ -202,6 +222,7 @@ export function OrdersPage() {
         </p>
         <PaginationControls currentPage={page} onPageChange={setPage} totalPages={totalPages} />
       </div>
+      {downloadError ? <p className="theme-message theme-message-error mb-4">{downloadError}</p> : null}
       <div className="table-shell">
         <table className="app-table min-w-[820px] text-left text-sm">
           <thead>
@@ -210,7 +231,7 @@ export function OrdersPage() {
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Print</th>
+              <th className="px-4 py-3">Download</th>
             </tr>
           </thead>
           <tbody>
@@ -225,9 +246,14 @@ export function OrdersPage() {
                 <td className="px-4 py-3">{formatCurrency(subscription.totalAmount)}</td>
                 <td className="px-4 py-3"><StatusBadge status={subscription.status} /></td>
                 <td className="px-4 py-3">
-                  <Link className="font-semibold text-[color:var(--color-primary-strong)]" to={`/account/orders/${subscription.id}?print=1`}>
-                    Print
-                  </Link>
+                  <button
+                    className="font-semibold text-[color:var(--color-primary-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={downloadingOrderId === subscription.id}
+                    onClick={() => void handleDownloadPdf(subscription.id)}
+                    type="button"
+                  >
+                    {downloadingOrderId === subscription.id ? 'Preparing PDF...' : 'Download PDF'}
+                  </button>
                 </td>
               </tr>
             ))}
@@ -480,7 +506,8 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
   const { token } = useSession();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const hasAutoPrinted = useRef(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const hasAutoDownloaded = useRef(false);
   const subscriptionQuery = useQuery({
     queryKey: ['portal-order', id],
     queryFn: () => apiRequest<Subscription>(`/subscriptions/${id}`, { token }),
@@ -535,12 +562,10 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
   });
 
   const subscription = subscriptionQuery.data;
+  const hasCompletedPurchase = Boolean(subscription?.invoices.some((invoice) => invoice.status === 'paid'));
   const canConfirm = mode === 'detail' && ['draft', 'quotation', 'quotation_sent'].includes(subscription?.status ?? '');
-  const canRenew =
-    mode === 'detail' &&
-    ['confirmed', 'active', 'closed'].includes(subscription?.status ?? '') &&
-    Boolean(subscription?.recurringPlan?.isRenewable);
-  const canUpsell = mode === 'detail' && ['confirmed', 'active', 'closed'].includes(subscription?.status ?? '');
+  const canRenew = mode === 'detail' && hasCompletedPurchase;
+  const canUpsell = mode === 'detail' && hasCompletedPurchase;
   const canClose =
     mode === 'detail' &&
     ['confirmed', 'active'].includes(subscription?.status ?? '') &&
@@ -550,7 +575,7 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
     ['confirmed', 'active'].includes(subscription?.status ?? '') &&
     Boolean(subscription?.recurringPlan?.isPausable);
   const canResume = mode === 'detail' && subscription?.status === 'paused' && Boolean(subscription?.recurringPlan?.isPausable);
-  const shouldPrint = mode === 'detail' && searchParams.get('print') === '1';
+  const shouldAutoDownloadPdf = mode === 'detail' && searchParams.get('print') === '1';
   const historyItems = useMemo(
     () =>
       (subscription?.childOrders ?? []).map((child) => ({
@@ -560,20 +585,40 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
     [subscription?.childOrders]
   );
 
-  useEffect(() => {
-    if (!subscription || !shouldPrint || hasAutoPrinted.current) {
+  const handleDownloadPdf = async () => {
+    if (!subscription) {
       return;
     }
 
-    hasAutoPrinted.current = true;
+    try {
+      setError(null);
+      setIsDownloadingPdf(true);
+      await downloadSubscriptionPdf(subscription);
+    } catch (downloadErrorValue) {
+      setError(
+        downloadErrorValue instanceof ApiError || downloadErrorValue instanceof Error
+          ? downloadErrorValue.message
+          : 'Unable to download order PDF'
+      );
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!subscription || !shouldAutoDownloadPdf || hasAutoDownloaded.current) {
+      return;
+    }
+
+    hasAutoDownloaded.current = true;
     const timer = window.setTimeout(() => {
-      window.print();
+      void handleDownloadPdf();
     }, 180);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [shouldPrint, subscription]);
+  }, [handleDownloadPdf, shouldAutoDownloadPdf, subscription]);
 
   if (!subscription) {
     return (
@@ -619,6 +664,10 @@ function SubscriptionDetailView({ mode }: { mode: 'detail' | 'preview' }) {
                 Resume
               </button>
             ) : null}
+            <button className="app-btn app-btn-secondary px-4 py-2 text-sm" disabled={isDownloadingPdf} onClick={() => void handleDownloadPdf()} type="button">
+              <DownloadIcon className="h-4 w-4" />
+              {isDownloadingPdf ? 'Preparing PDF...' : 'Download PDF'}
+            </button>
           </div>
         ) : null
       }

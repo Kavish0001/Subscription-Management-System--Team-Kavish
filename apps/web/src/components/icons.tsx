@@ -100,6 +100,16 @@ export function ReceiptIcon(props: Readonly<IconProps>) {
   );
 }
 
+export function DownloadIcon(props: Readonly<IconProps>) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 4v10" />
+      <path d="m8 10 4 4 4-4" />
+      <path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1" />
+    </IconBase>
+  );
+}
+
 export function CreditCardIcon(props: Readonly<IconProps>) {
   return (
     <IconBase {...props}>

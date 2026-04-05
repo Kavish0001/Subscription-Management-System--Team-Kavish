@@ -1,4 +1,4 @@
-import { Prisma, SubscriptionStatus } from '@prisma/client';
+import { InvoiceStatus, Prisma, SubscriptionStatus } from '@prisma/client';
 import { createSubscriptionSchema, paginationSchema } from '@subscription/shared';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -11,7 +11,6 @@ import {
   isClosableSubscriptionStatus,
   isDeletableSubscriptionStatus,
   isEditableSubscriptionStatus,
-  isFollowUpEligibleStatus,
   isPausableSubscriptionStatus,
   resolveAutoCloseDate,
   syncSubscriptionOperationalStatuses,
@@ -143,6 +142,16 @@ function resolveTemplateExpirationDate(
   return addInterval(startDate, template.durationCount, template.durationUnit);
 }
 
+function hasCompletedPurchase(
+  subscription: {
+    invoices: Array<{
+      status: InvoiceStatus;
+    }>;
+  }
+) {
+  return subscription.invoices.some((invoice) => invoice.status === InvoiceStatus.paid);
+}
+
 async function createLifecycleSubscription(input: {
   subscriptionId: string;
   relationType: 'renewal' | 'upsell';
@@ -157,6 +166,11 @@ async function createLifecycleSubscription(input: {
     include: {
       recurringPlan: true,
       customerContact: true,
+      invoices: {
+        select: {
+          status: true
+        }
+      },
       lines: {
         orderBy: { sortOrder: 'asc' }
       }
@@ -167,12 +181,8 @@ async function createLifecycleSubscription(input: {
     throw new AppError('Subscription order not found', 404, 'SUBSCRIPTION_NOT_FOUND');
   }
 
-  if (!isFollowUpEligibleStatus(existing.status)) {
-    throw new AppError('Only confirmed, live, or closed subscriptions can create follow-up orders', 409);
-  }
-
-  if (input.relationType === 'renewal' && existing.recurringPlan && !existing.recurringPlan.isRenewable) {
-    throw new AppError('This recurring plan does not allow renewal', 409);
+  if (!hasCompletedPurchase(existing)) {
+    throw new AppError('A completed purchase is required before creating subscription follow-up orders', 409, 'PURCHASE_REQUIRED');
   }
 
   const now = new Date();
