@@ -8,6 +8,7 @@ import {
   formatCurrency,
   type Contact,
   type Product,
+  type QuotationTemplateConfig,
   type RecurringPlan,
   type SessionUser,
 } from '../../lib/api';
@@ -16,17 +17,25 @@ import { useSession } from '../../lib/session';
 
 const fieldClass = 'app-input';
 
+type SubscriptionLineDraft = {
+  productId: string;
+  variantId?: string | null;
+  variantName?: string | null;
+  quantity: number;
+  unitPrice: number;
+};
+
 export function SubscriptionFormPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { token, user } = useSession();
   const [customerContactId, setCustomerContactId] = useState('');
   const [salespersonUserId, setSalespersonUserId] = useState('');
+  const [quotationTemplateId, setQuotationTemplateId] = useState('');
   const [recurringPlanId, setRecurringPlanId] = useState('');
-  const [productId, setProductId] = useState('');
-  const [quantity, setQuantity] = useState(1);
   const [paymentTermLabel, setPaymentTermLabel] = useState('Immediate payment');
   const [notes, setNotes] = useState('');
+  const [lines, setLines] = useState<SubscriptionLineDraft[]>([blankSubscriptionLine()]);
   const [showContactForm, setShowContactForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contactForm, setContactForm] = useState({
@@ -66,6 +75,11 @@ export function SubscriptionFormPage() {
     queryFn: () => apiRequest<RecurringPlan[]>('/recurring-plans', { token }),
   });
 
+  const templatesQuery = useQuery({
+    queryKey: ['subscription-form-quotation-templates'],
+    queryFn: () => apiRequest<QuotationTemplateConfig[]>('/quotation-templates', { token }),
+  });
+
   useEffect(() => {
     if (!customerContactId && contactsQuery.data?.[0]) {
       setCustomerContactId(contactsQuery.data[0].id);
@@ -73,10 +87,26 @@ export function SubscriptionFormPage() {
   }, [contactsQuery.data, customerContactId]);
 
   useEffect(() => {
-    if (!productId && productsQuery.data?.[0]) {
-      setProductId(productsQuery.data[0].id);
+    if (quotationTemplateId) {
+      return;
     }
-  }, [productId, productsQuery.data]);
+
+    if (!lines[0]?.productId && productsQuery.data?.[0]) {
+      setLines((current) => {
+        if (current[0]?.productId) {
+          return current;
+        }
+
+        return [
+          {
+            ...blankSubscriptionLine(),
+            productId: productsQuery.data[0].id,
+          },
+          ...current.slice(1),
+        ];
+      });
+    }
+  }, [lines, productsQuery.data, quotationTemplateId]);
 
   useEffect(() => {
     if (!salespersonUserId) {
@@ -88,39 +118,112 @@ export function SubscriptionFormPage() {
     }
   }, [salespersonUserId, user, usersQuery.data]);
 
-  const selectedProduct = useMemo(
-    () => productsQuery.data?.find((product) => product.id === productId) ?? null,
-    [productId, productsQuery.data],
-  );
-
-  const availablePlanIds = useMemo(
-    () => selectedProduct?.planPricing.map((plan) => plan.recurringPlanId) ?? [],
-    [selectedProduct],
+  const selectedTemplate = useMemo(
+    () => templatesQuery.data?.find((template) => template.id === quotationTemplateId) ?? null,
+    [quotationTemplateId, templatesQuery.data],
   );
 
   useEffect(() => {
+    if (!selectedTemplate) {
+      return;
+    }
+
+    if (selectedTemplate.recurringPlan?.id) {
+      setRecurringPlanId(selectedTemplate.recurringPlan.id);
+    }
+
+    if (selectedTemplate.paymentTermLabel) {
+      setPaymentTermLabel(selectedTemplate.paymentTermLabel);
+    }
+
+    if (selectedTemplate.description && !notes.trim()) {
+      setNotes(selectedTemplate.description);
+    }
+
+    if (selectedTemplate.lines.length) {
+      setLines(
+        selectedTemplate.lines.map((line) => ({
+          productId: line.productId,
+          variantId: line.variantId,
+          variantName: line.variantName,
+          quantity: line.quantity,
+          unitPrice: Number(line.unitPrice) || 0,
+        })),
+      );
+    }
+  }, [notes, selectedTemplate]);
+
+  const lineItems = useMemo(
+    () =>
+      lines.map((line, index) => {
+        const product = productsQuery.data?.find((entry) => entry.id === line.productId) ?? null;
+        const unitPrice = resolveSubscriptionLineUnitPrice(
+          product,
+          recurringPlanId,
+          line.unitPrice,
+        );
+
+        return {
+          index,
+          ...line,
+          product,
+          unitPrice,
+        };
+      }),
+    [lines, productsQuery.data, recurringPlanId],
+  );
+
+  const availablePlanIds = useMemo(() => {
+    const selectedProducts = lineItems
+      .map((entry) => entry.product)
+      .filter((product): product is Product => Boolean(product));
+
+    if (!selectedProducts.length) {
+      return [];
+    }
+
+    const [firstProduct, ...restProducts] = selectedProducts;
+    const planIntersection = new Set(firstProduct.planPricing.map((plan) => plan.recurringPlanId));
+
+    restProducts.forEach((product) => {
+      const productPlanIds = new Set(product.planPricing.map((plan) => plan.recurringPlanId));
+      [...planIntersection].forEach((planId) => {
+        if (!productPlanIds.has(planId)) {
+          planIntersection.delete(planId);
+        }
+      });
+    });
+
+    return [...planIntersection];
+  }, [lineItems]);
+
+  useEffect(() => {
     const defaultPlan =
-      selectedProduct?.planPricing.find((plan) => plan.isDefaultPlan)?.recurringPlanId ??
-      selectedProduct?.planPricing[0]?.recurringPlanId ??
+      selectedTemplate?.recurringPlan?.id ??
+      lineItems[0]?.product?.planPricing.find((plan) => plan.isDefaultPlan)?.recurringPlanId ??
+      lineItems[0]?.product?.planPricing[0]?.recurringPlanId ??
       plansQuery.data?.[0]?.id;
 
     if (defaultPlan && defaultPlan !== recurringPlanId) {
       setRecurringPlanId(defaultPlan);
     }
-  }, [plansQuery.data, recurringPlanId, selectedProduct]);
+  }, [lineItems, plansQuery.data, recurringPlanId, selectedTemplate]);
 
-  const unitPrice =
-    Number(
-      selectedProduct?.planPricing.find((plan) => plan.recurringPlanId === recurringPlanId)
-        ?.overridePrice ??
-        selectedProduct?.baseSalesPrice ??
-        0,
-    ) || 0;
+  const estimatedSubtotal = lineItems.reduce(
+    (sum, line) => sum + line.unitPrice * Math.max(1, line.quantity),
+    0,
+  );
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedProduct) {
-        throw new ApiError('Select a product before saving', 400);
+      const preparedLines = lineItems.filter((line) => line.product);
+
+      if (!preparedLines.length) {
+        throw new ApiError('Add at least one product line before saving', 400);
+      }
+
+      if (preparedLines.some((line) => line.quantity < 1)) {
+        throw new ApiError('Each subscription line must have quantity at least 1', 400);
       }
 
       await apiRequest<{ id: string }>('/subscriptions', {
@@ -129,17 +232,17 @@ export function SubscriptionFormPage() {
         body: JSON.stringify({
           customerContactId,
           salespersonUserId,
+          quotationTemplateId: quotationTemplateId || undefined,
           recurringPlanId: recurringPlanId || undefined,
           sourceChannel: 'admin',
-          paymentTermLabel,
+          paymentTermLabel: paymentTermLabel.trim() || undefined,
           notes,
-          lines: [
-            {
-              productId: selectedProduct.id,
-              quantity,
-              unitPrice,
-            },
-          ],
+          lines: preparedLines.map((line) => ({
+            productId: line.productId,
+            variantId: line.variantId || undefined,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+          })),
         }),
       });
     },
@@ -237,6 +340,26 @@ export function SubscriptionFormPage() {
             </button>
           </div>
         </Field>
+        <Field label="Quotation Template">
+          <div className="grid gap-2">
+            <select
+              className={fieldClass}
+              onChange={(event) => setQuotationTemplateId(event.target.value)}
+              value={quotationTemplateId}
+            >
+              <option value="">No template</option>
+              {templatesQuery.data?.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm muted">
+              Optional. Selecting a quotation template fills the recurring plan, payment term, and
+              subscription lines from that template.
+            </p>
+          </div>
+        </Field>
         <Field label="Salesperson">
           {user?.role === 'admin' ? (
             <select
@@ -253,19 +376,6 @@ export function SubscriptionFormPage() {
           ) : (
             <input className={fieldClass} disabled value={user?.email ?? ''} />
           )}
-        </Field>
-        <Field label="Product">
-          <select
-            className={fieldClass}
-            onChange={(event) => setProductId(event.target.value)}
-            value={productId}
-          >
-            {productsQuery.data?.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.name}
-              </option>
-            ))}
-          </select>
         </Field>
         <Field label="Recurring Plan">
           <select
@@ -291,15 +401,6 @@ export function SubscriptionFormPage() {
             value={paymentTermLabel}
           />
         </Field>
-        <Field label="Quantity">
-          <input
-            className={fieldClass}
-            min={1}
-            onChange={(event) => setQuantity(Number(event.target.value))}
-            type="number"
-            value={quantity}
-          />
-        </Field>
         <Field label="Other Info">
           <textarea
             className={fieldClass}
@@ -308,48 +409,169 @@ export function SubscriptionFormPage() {
             value={notes}
           />
         </Field>
-        {selectedProduct ? (
+        {selectedTemplate ? (
           <div className="app-card p-5 md:col-span-2">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              {resolveProductPreviewImage(selectedProduct) ? (
-                <img
-                  alt={selectedProduct.name}
-                  className="h-28 w-full rounded-[24px] border border-[color:var(--color-border)] object-cover sm:w-40"
-                  loading="lazy"
-                  src={resolveProductPreviewImage(selectedProduct) ?? undefined}
-                />
-              ) : (
-                <div className="grid h-28 w-full place-items-center rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--color-text-muted)] sm:w-40">
-                  Product
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">
-                  <span className="rounded-full bg-[color:var(--color-card-muted)] px-3 py-1">
-                    {selectedProduct.productType}
-                  </span>
-                  {selectedProduct.category?.name ? (
-                    <span className="rounded-full bg-[color:var(--color-card-muted)] px-3 py-1">
-                      {selectedProduct.category.name}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="mt-3 text-lg font-semibold text-[color:var(--color-text-primary)]">
-                  {selectedProduct.name}
+            <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">
+              Template autofill
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="app-soft-panel rounded-2xl px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">
+                  Template
                 </p>
-                <p className="mt-2 text-sm muted">
-                  {selectedProduct.description ?? 'Seeded catalog product ready for subscription creation.'}
+                <p className="mt-2 font-semibold text-[color:var(--color-text-primary)]">
+                  {selectedTemplate.name}
                 </p>
-                <p className="mt-3 text-sm font-semibold text-[color:var(--color-text-primary)]">
-                  {formatCurrency(unitPrice)} per billing cycle
+              </div>
+              <div className="app-soft-panel rounded-2xl px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">
+                  Validity
+                </p>
+                <p className="mt-2 font-semibold text-[color:var(--color-text-primary)]">
+                  {selectedTemplate.validityDays} day(s)
+                </p>
+              </div>
+              <div className="app-soft-panel rounded-2xl px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">
+                  Preset lines
+                </p>
+                <p className="mt-2 font-semibold text-[color:var(--color-text-primary)]">
+                  {selectedTemplate.lines.length || 0}
                 </p>
               </div>
             </div>
           </div>
         ) : null}
+        <div className="app-card p-5 md:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">
+                Subscription lines
+              </p>
+              <p className="mt-1 text-sm muted">
+                {selectedTemplate
+                  ? 'Template lines are loaded below. You can review and adjust them before saving.'
+                  : 'Add the products that belong to this subscription.'}
+              </p>
+            </div>
+            <button
+              className="app-btn app-btn-secondary"
+              onClick={() =>
+                setLines((current) => [
+                  ...current,
+                  blankSubscriptionLine(productsQuery.data?.[0]?.id),
+                ])
+              }
+              type="button"
+            >
+              Add Line
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-4">
+            {lineItems.map((line) => (
+              <div
+                className="rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card-muted)] p-4"
+                key={`${line.index}-${line.productId || 'blank'}`}
+              >
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1.6fr)_140px_160px_auto]">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-[color:var(--color-text-primary)]">
+                      Product
+                    </label>
+                    <select
+                      className={fieldClass}
+                      onChange={(event) =>
+                        setLines((current) =>
+                          current.map((entry, entryIndex) =>
+                            entryIndex === line.index
+                              ? {
+                                  ...entry,
+                                  productId: event.target.value,
+                                  variantId: null,
+                                  variantName: null,
+                                }
+                              : entry,
+                          ),
+                        )
+                      }
+                      value={line.productId}
+                    >
+                      <option value="">Select product</option>
+                      {productsQuery.data?.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name}
+                        </option>
+                      ))}
+                    </select>
+                    {line.variantName ? (
+                      <p className="text-xs text-[color:var(--color-text-secondary)]">
+                        Variant: {line.variantName}
+                      </p>
+                    ) : null}
+                    <p className="text-xs text-[color:var(--color-text-secondary)]">
+                      {line.product?.description ??
+                        'Choose a product to include in this subscription.'}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-[color:var(--color-text-primary)]">
+                      Quantity
+                    </label>
+                    <input
+                      className={fieldClass}
+                      min={1}
+                      onChange={(event) =>
+                        setLines((current) =>
+                          current.map((entry, entryIndex) =>
+                            entryIndex === line.index
+                              ? {
+                                  ...entry,
+                                  quantity: Math.max(1, Number(event.target.value) || 1),
+                                }
+                              : entry,
+                          ),
+                        )
+                      }
+                      type="number"
+                      value={line.quantity}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-[color:var(--color-text-primary)]">
+                      Unit Price
+                    </label>
+                    <div className="app-readonly">{formatCurrency(line.unitPrice)}</div>
+                    <p className="text-xs text-[color:var(--color-text-secondary)]">
+                      Based on the selected recurring plan.
+                    </p>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      className="app-btn app-btn-secondary"
+                      onClick={() =>
+                        setLines((current) =>
+                          current.length === 1
+                            ? [blankSubscriptionLine(productsQuery.data?.[0]?.id)]
+                            : current.filter((_, entryIndex) => entryIndex !== line.index),
+                        )
+                      }
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="app-soft-panel p-5 md:col-span-2">
           <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">
-            Estimated total with tax: {formatCurrency(unitPrice * quantity * 1.18)}
+            Estimated total with tax: {formatCurrency(estimatedSubtotal * 1.18)}
           </p>
           <p className="mt-3 text-sm muted">
             Invoices are created after the quotation is confirmed and reaches its billing date.
@@ -463,9 +685,39 @@ function Field({ children, label }: { children: React.ReactNode; label: string }
 
 function resolveProductPreviewImage(product: Product) {
   const mediaImage = product.media?.find((entry) => entry.type === 'image')?.url;
-  const candidateUrls = [mediaImage ?? null, ...(product.imageUrls ?? []), product.imageUrl ?? null].filter(
-    (value): value is string => Boolean(value),
-  );
+  const candidateUrls = [
+    mediaImage ?? null,
+    ...(product.imageUrls ?? []),
+    product.imageUrl ?? null,
+  ].filter((value): value is string => Boolean(value));
 
   return candidateUrls[0] ?? null;
+}
+
+function blankSubscriptionLine(productId = ''): SubscriptionLineDraft {
+  return {
+    productId,
+    variantId: null,
+    variantName: null,
+    quantity: 1,
+    unitPrice: 0,
+  };
+}
+
+function resolveSubscriptionLineUnitPrice(
+  product: Product | null,
+  recurringPlanId: string,
+  fallbackPrice = 0,
+) {
+  if (!product) {
+    return fallbackPrice;
+  }
+
+  return (
+    Number(
+      product.planPricing.find((plan) => plan.recurringPlanId === recurringPlanId)?.overridePrice ??
+        product.baseSalesPrice ??
+        fallbackPrice,
+    ) || 0
+  );
 }
