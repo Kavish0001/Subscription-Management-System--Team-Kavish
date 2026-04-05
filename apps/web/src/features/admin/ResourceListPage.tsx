@@ -378,7 +378,8 @@ export function ResourceListPage({
       }
 
       const selectedPlanIds = value.selectedPlanIds.filter((entry) => entry !== plan.id);
-      const { [plan.id]: _removedOverride, ...planOverrides } = value.planOverrides;
+      const planOverrides = { ...value.planOverrides };
+      delete planOverrides[plan.id];
 
       return {
         ...value,

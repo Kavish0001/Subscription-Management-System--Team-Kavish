@@ -797,27 +797,6 @@ function ChildTable({ title, onAdd, children }: { title: string; onAdd?: () => v
   );
 }
 
-function ToggleRow({
-  disabled,
-  items,
-  onToggle
-}: {
-  disabled: boolean;
-  items: Array<{ label: string; checked: boolean; key: string }>;
-  onToggle: (key: string, checked: boolean) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-4 md:col-span-3">
-      {items.map((entry) => (
-        <label className="flex items-center gap-2 text-sm text-slate-200" key={entry.key}>
-          <input checked={entry.checked} disabled={disabled} onChange={(event) => onToggle(entry.key, event.target.checked)} type="checkbox" />
-          {entry.label}
-        </label>
-      ))}
-    </div>
-  );
-}
-
 function PaginationControls({
   currentPage,
   onPageChange,
@@ -976,13 +955,6 @@ function updateRecurringRow(
     recurringPrices: current.recurringPrices.map((entry, entryIndex) =>
       entryIndex === index ? { ...entry, [key]: value } : entry
     )
-  }));
-}
-
-function removeRecurringRow(setForm: React.Dispatch<React.SetStateAction<ProductFormState>>, index: number) {
-  setForm((current) => ({
-    ...current,
-    recurringPrices: current.recurringPrices.filter((_, entryIndex) => entryIndex !== index)
   }));
 }
 

@@ -1,20 +1,20 @@
 import { UserRole } from '@prisma/client';
 import {
   confirmPasswordResetSchema,
-  requestPasswordResetSchema,
-  type SessionUser,
   loginSchema,
+  requestPasswordResetSchema,
+  resendOtpSchema,
+  type SessionUser,
   signupSchema,
   verifyOtpSchema,
-  resendOtpSchema
 } from '@subscription/shared';
 import argon2 from 'argon2';
-import { createHash, randomBytes } from 'node:crypto';
 import jwt, { type JwtPayload, type SignOptions } from 'jsonwebtoken';
+import { createHash, randomBytes } from 'node:crypto';
 
 import { env } from '../../config/env.js';
-import { AppError } from '../../lib/errors.js';
 import { mailer } from '../../lib/email.js';
+import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 
 function validateJwtTtl(value: string): SignOptions['expiresIn'] {
@@ -89,6 +89,15 @@ async function createSessionTokens(user: SessionUser) {
     accessToken,
     refreshToken,
     user
+  };
+}
+
+function toSessionUser(user: { id: string; email: string; name: string | null; role: UserRole }): SessionUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role
   };
 }
 
@@ -181,7 +190,7 @@ export async function signup(input: unknown) {
 
   const user = await createPortalUser(payload);
 
-  await (prisma.user as any).update({
+  await prisma.user.update({
     where: { id: user.id },
     data: {
       verificationCode: otp,
@@ -211,7 +220,7 @@ export async function login(input: unknown) {
     throw new AppError('Account banned by admin', 403, 'ACCOUNT_INACTIVE');
   }
 
-  if (!(user as any).emailVerifiedAt) {
+  if (!user.emailVerifiedAt) {
     throw new AppError('Email is not verified', 403, 'EMAIL_NOT_VERIFIED');
   }
 
@@ -225,14 +234,7 @@ export async function login(input: unknown) {
     data: { lastLoginAt: new Date() }
   });
 
-  const sessionUser: SessionUser = {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role
-  };
-
-  return createSessionTokens(sessionUser);
+  return createSessionTokens(toSessionUser(user));
 }
 
 export async function refreshSession(refreshToken: string) {
@@ -270,14 +272,7 @@ export async function refreshSession(refreshToken: string) {
     data: { revokedAt: new Date() }
   });
 
-  const sessionUser: SessionUser = {
-    id: storedToken.user.id,
-    email: storedToken.user.email,
-    name: storedToken.user.name,
-    role: storedToken.user.role
-  };
-
-  return createSessionTokens(sessionUser);
+  return createSessionTokens(toSessionUser(storedToken.user));
 }
 
 export async function logout(refreshToken?: string) {
@@ -324,7 +319,6 @@ export async function requestPasswordReset(input: unknown) {
     }
   });
 
-
   await prisma.auditLog.create({
     data: {
       entityType: 'user',
@@ -357,15 +351,15 @@ export async function verifyOtp(input: unknown) {
     throw new AppError('User not found', 404, 'USER_NOT_FOUND');
   }
 
-  if ((user as any).emailVerifiedAt) {
-    return { message: 'Email already verified' };
+  if (user.emailVerifiedAt) {
+    return createSessionTokens(toSessionUser(user));
   }
 
-  if ((user as any).verificationCode !== payload.otp || !(user as any).verificationExpiresAt || (user as any).verificationExpiresAt < new Date()) {
+  if (user.verificationCode !== payload.otp || !user.verificationExpiresAt || user.verificationExpiresAt < new Date()) {
     throw new AppError('Invalid or expired verification code', 400, 'INVALID_CODE');
   }
 
-  await (prisma.user as any).update({
+  await prisma.user.update({
     where: { id: user.id },
     data: {
       emailVerifiedAt: new Date(),
@@ -374,14 +368,7 @@ export async function verifyOtp(input: unknown) {
     }
   });
 
-  const sessionUser: SessionUser = {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role
-  };
-
-  return createSessionTokens(sessionUser);
+  return createSessionTokens(toSessionUser(user));
 }
 
 export async function resendOtp(input: unknown) {
@@ -396,14 +383,14 @@ export async function resendOtp(input: unknown) {
     throw new AppError('User not found', 404, 'USER_NOT_FOUND');
   }
 
-  if ((user as any).emailVerifiedAt) {
+  if (user.emailVerifiedAt) {
     throw new AppError('Email already verified', 400, 'ALREADY_VERIFIED');
   }
 
   const otp = generateOtp();
   const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-  await (prisma.user as any).update({
+  await prisma.user.update({
     where: { id: user.id },
     data: {
       verificationCode: otp,

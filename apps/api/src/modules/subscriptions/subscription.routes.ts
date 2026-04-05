@@ -3,7 +3,6 @@ import { createSubscriptionSchema, paginationSchema } from '@subscription/shared
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { buildSubscriptionPricing } from './pricing.js';
 import {
   addInterval,
   defaultQuotationExpiry,
@@ -15,6 +14,7 @@ import {
   resolveAutoCloseDate,
   syncSubscriptionOperationalStatuses,
 } from './lifecycle.js';
+import { buildSubscriptionPricing } from './pricing.js';
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRole, type AuthContext, type AuthenticatedRequest } from '../../middleware/auth.js';

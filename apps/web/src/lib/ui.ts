@@ -7,7 +7,6 @@ export function cn(...values: Array<string | false | null | undefined>) {
 }
 
 export function formatStatusLabel(value: string) {
-  if (value === 'in_progress' || value === 'active') return 'Active';
   return value
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -16,7 +15,7 @@ export function formatStatusLabel(value: string) {
 export function getStatusTone(value: string): StatusTone {
   const status = value.toLowerCase();
 
-  if (['paid', 'active', 'completed'].includes(status)) {
+  if (['paid', 'active', 'completed', 'in_progress'].includes(status)) {
     return 'success';
   }
 

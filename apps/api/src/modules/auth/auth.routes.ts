@@ -1,10 +1,10 @@
+import type { UserRole } from '@subscription/shared';
 import { Router, type Response } from 'express';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
-import type { UserRole } from '@subscription/shared';
 
-import { confirmPasswordReset, login, logout, refreshSession, requestPasswordReset, signup, verifyOtp, resendOtp } from './auth.service.js';
-import { AppError } from '../../lib/errors.js';
+import { confirmPasswordReset, login, logout, refreshSession, requestPasswordReset, resendOtp, signup, verifyOtp } from './auth.service.js';
 import { env } from '../../config/env.js';
+import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 
 const accessCookieName = 'accessToken';
@@ -58,7 +58,7 @@ authRouter.post('/signup', async (request, response, next) => {
 
 authRouter.post('/verify-otp', async (request, response, next) => {
   try {
-    const result = (await verifyOtp(request.body)) as any;
+    const result = await verifyOtp(request.body);
     writeSessionCookies(response, result);
     response.json({ data: { user: result.user } });
   } catch (error) {
@@ -77,7 +77,7 @@ authRouter.post('/resend-otp', async (request, response, next) => {
 
 authRouter.post('/login', async (request, response, next) => {
   try {
-    const result = (await login(request.body)) as any;
+    const result = await login(request.body);
     writeSessionCookies(response, result);
     response.json({ data: { user: result.user } });
   } catch (error) {
@@ -88,7 +88,7 @@ authRouter.post('/login', async (request, response, next) => {
 authRouter.post('/refresh', async (request, response, next) => {
   try {
     const refreshToken = request.cookies[refreshCookieName] as string | undefined;
-    const result = (await refreshSession(refreshToken ?? '')) as any;
+    const result = await refreshSession(refreshToken ?? '');
     writeSessionCookies(response, result);
     response.json({ data: { user: result.user } });
   } catch (error) {

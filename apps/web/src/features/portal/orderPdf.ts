@@ -54,7 +54,7 @@ export async function downloadSubscriptionPdf(subscription: Subscription) {
   };
 
   cursorY = drawHero(doc, subscription, margin, contentWidth, cursorY);
-  cursorY += 18;
+  cursorY += 14;
 
   const leftCardRows: PdfRow[] = [
     { label: 'Customer', value: subscription.customerContact.name },
@@ -70,7 +70,7 @@ export async function downloadSubscriptionPdf(subscription: Subscription) {
     { label: 'Next invoice', value: formatDate(subscription.nextInvoiceDate) },
     { label: 'Payment term', value: textValue(subscription.paymentTermLabel, 'Standard') }
   ];
-  const cardGap = 16;
+  const cardGap = 14;
   const cardWidth = (contentWidth - cardGap) / 2;
   const customerCardHeight = measureInfoCard(doc, cardWidth, leftCardRows);
   const orderCardHeight = measureInfoCard(doc, cardWidth, rightCardRows);
@@ -79,10 +79,10 @@ export async function downloadSubscriptionPdf(subscription: Subscription) {
   ensureSpace(topCardsHeight);
   drawInfoCard(doc, margin, cursorY, cardWidth, 'Customer & subscription', leftCardRows, topCardsHeight);
   drawInfoCard(doc, margin + cardWidth + cardGap, cursorY, cardWidth, 'Order overview', rightCardRows, topCardsHeight);
-  cursorY += topCardsHeight + 20;
+  cursorY += topCardsHeight + 16;
 
   drawSectionHeading(doc, margin, cursorY, 'Line items');
-  cursorY += 18;
+  cursorY += 14;
 
   const columnWidths = [contentWidth * 0.45, contentWidth * 0.12, contentWidth * 0.19, contentWidth * 0.24];
   const drawLineTableHeader = () => {
@@ -104,8 +104,8 @@ export async function downloadSubscriptionPdf(subscription: Subscription) {
       {
         description,
         quantity: String(line.quantity),
-        unitPrice: formatCurrency(line.unitPrice),
-        lineTotal: formatCurrency(line.lineTotal)
+        unitPrice: formatPdfCurrency(line.unitPrice),
+        lineTotal: formatPdfCurrency(line.lineTotal)
       },
       margin,
       cursorY,
@@ -115,13 +115,13 @@ export async function downloadSubscriptionPdf(subscription: Subscription) {
     cursorY += rowHeight;
   });
 
-  cursorY += 20;
+  cursorY += 14;
 
   const totalsRows: PdfRow[] = [
-    { label: 'Untaxed amount', value: formatCurrency(subscription.subtotalAmount) },
-    { label: 'Discount', value: formatCurrency(subscription.discountAmount) },
-    { label: 'Tax', value: formatCurrency(subscription.taxAmount) },
-    { label: 'Total', value: formatCurrency(subscription.totalAmount) }
+    { label: 'Untaxed amount', value: formatPdfCurrency(subscription.subtotalAmount) },
+    { label: 'Discount', value: formatPdfCurrency(subscription.discountAmount) },
+    { label: 'Tax', value: formatPdfCurrency(subscription.taxAmount) },
+    { label: 'Total', value: formatPdfCurrency(subscription.totalAmount) }
   ];
   const statusRows: PdfRow[] = [
     { label: 'Quotation date', value: formatDate(subscription.quotationDate) },
@@ -137,40 +137,34 @@ export async function downloadSubscriptionPdf(subscription: Subscription) {
   ensureSpace(summaryBlockHeight);
   drawInfoCard(doc, margin, cursorY, summaryCardWidth, 'Lifecycle dates', statusRows, summaryBlockHeight, true);
   drawInfoCard(doc, margin + summaryCardWidth + cardGap, cursorY, summaryCardWidth, 'Financial summary', totalsRows, summaryBlockHeight, true);
-  cursorY += summaryBlockHeight + 20;
+  cursorY += summaryBlockHeight + 14;
 
-  const invoiceRows =
-    subscription.invoices.length > 0
+  const referenceRows: PdfRow[] = [
+    ...(subscription.invoices.length > 0
       ? subscription.invoices.map((invoice) => ({
-          label: invoice.invoiceNumber,
-          value: `${startCase(invoice.status)} | Due ${formatDate(invoice.dueDate)} | ${formatCurrency(invoice.amountDue)}`
+          label: `Invoice ${invoice.invoiceNumber}`,
+          value: `${startCase(invoice.status)} | Due ${formatDate(invoice.dueDate)} | ${formatPdfCurrency(invoice.amountDue)}`
         }))
-      : [{ label: 'Invoices', value: 'No invoices linked yet.' }];
-  const historyRows =
-    subscription.parentOrder || (subscription.childOrders?.length ?? 0) > 0
+      : [{ label: 'Invoices', value: 'No invoices linked yet.' }]),
+    ...(subscription.parentOrder
       ? [
-          ...(subscription.parentOrder
-            ? [
-                {
-                  label: 'Parent',
-                  value: `${subscription.parentOrder.subscriptionNumber} | ${startCase(subscription.parentOrder.status)}`
-                }
-              ]
-            : []),
-          ...((subscription.childOrders ?? []).map((child) => ({
-            label: child.relationType === 'upsell' ? 'Upsell' : 'Renewal',
-            value: `${child.subscriptionNumber} | ${startCase(child.status)} | ${formatDate(child.createdAt)}`
-          })) satisfies PdfRow[])
+          {
+            label: 'Parent order',
+            value: `${subscription.parentOrder.subscriptionNumber} | ${startCase(subscription.parentOrder.status)}`
+          }
         ]
-      : [{ label: 'History', value: 'No renewals or upsells yet.' }];
-  const invoiceCardHeight = measureInfoCard(doc, cardWidth, invoiceRows);
-  const historyCardHeight = measureInfoCard(doc, cardWidth, historyRows);
-  const referenceBlockHeight = Math.max(invoiceCardHeight, historyCardHeight);
+      : []),
+    ...((subscription.childOrders ?? []).map((child) => ({
+      label: child.relationType === 'upsell' ? 'Upsell' : 'Renewal',
+      value: `${child.subscriptionNumber} | ${startCase(child.status)} | ${formatDate(child.createdAt)}`
+    })) satisfies PdfRow[]),
+    ...(subscription.parentOrder || (subscription.childOrders?.length ?? 0) > 0 ? [] : [{ label: 'History', value: 'No renewals or upsells yet.' }])
+  ];
+  const referencesHeight = measureInfoCard(doc, contentWidth, referenceRows);
 
-  ensureSpace(referenceBlockHeight);
-  drawInfoCard(doc, margin, cursorY, cardWidth, 'Invoices', invoiceRows, referenceBlockHeight);
-  drawInfoCard(doc, margin + cardWidth + cardGap, cursorY, cardWidth, 'Order history', historyRows, referenceBlockHeight);
-  cursorY += referenceBlockHeight + 20;
+  ensureSpace(referencesHeight);
+  drawInfoCard(doc, margin, cursorY, contentWidth, 'Invoices & history', referenceRows, referencesHeight);
+  cursorY += referencesHeight + 14;
 
   if (subscription.notes) {
     const notesHeight = measureParagraphCard(doc, contentWidth, subscription.notes);
@@ -183,13 +177,13 @@ export async function downloadSubscriptionPdf(subscription: Subscription) {
 }
 
 function drawHero(doc: jsPDF, subscription: Subscription, x: number, width: number, y: number) {
-  const heroHeight = 126;
+  const heroHeight = 118;
 
   doc.setFillColor(...PDF_THEME.primaryStrong);
   doc.roundedRect(x, y, width, heroHeight, 28, 28, 'F');
 
   doc.setFillColor(...PDF_THEME.primary);
-  doc.roundedRect(x + width - 166, y + 16, 138, 86, 22, 22, 'F');
+  doc.roundedRect(x + width - 166, y + 14, 138, 78, 22, 22, 'F');
 
   doc.setTextColor(...PDF_THEME.white);
   doc.setFont('helvetica', 'bold');
@@ -204,19 +198,19 @@ function drawHero(doc: jsPDF, subscription: Subscription, x: number, width: numb
   doc.text(
     [subscription.recurringPlan?.name ?? 'Recurring subscription', `Source: ${textValue(subscription.sourceChannel)}`],
     x + 24,
-    y + 84
+    y + 80
   );
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('ORDER NUMBER', x + width - 150, y + 38);
+  doc.text('ORDER NUMBER', x + width - 150, y + 34);
 
-  doc.setFontSize(16);
-  doc.text(subscription.subscriptionNumber, x + width - 150, y + 62);
+  doc.setFontSize(getFittedFontSize(doc, subscription.subscriptionNumber, 16, 11, 132));
+  doc.text(subscription.subscriptionNumber, x + width - 150, y + 56);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Status: ${startCase(subscription.status)}`, x + width - 150, y + 84);
+  doc.text(`Status: ${startCase(subscription.status)}`, x + width - 150, y + 76);
 
   return y + heroHeight;
 }
@@ -247,19 +241,20 @@ function drawSectionHeading(doc: jsPDF, x: number, y: number, title: string) {
 }
 
 function measureInfoCard(doc: jsPDF, width: number, rows: PdfRow[], emphasizeLast = false) {
-  let height = 52;
+  const valueWidth = getInfoCardValueWidth(width);
+  let height = 42;
 
   rows.forEach((row, index) => {
-    const valueLines = doc.splitTextToSize(row.value, width - 148);
-    const textHeight = Math.max(18, valueLines.length * 12 + 6);
-    height += textHeight + (index === rows.length - 1 ? 0 : 8);
+    const valueLines = doc.splitTextToSize(row.value, valueWidth);
+    const textHeight = Math.max(15, valueLines.length * 11 + 4);
+    height += textHeight + (index === rows.length - 1 ? 0 : 6);
   });
 
   if (emphasizeLast) {
-    height += 6;
+    height += 4;
   }
 
-  return Math.max(height + 16, 168);
+  return height + 12;
 }
 
 function drawInfoCard(doc: jsPDF, x: number, y: number, width: number, title: string, rows: PdfRow[], height: number, emphasizeLast = false) {
@@ -272,28 +267,29 @@ function drawInfoCard(doc: jsPDF, x: number, y: number, width: number, title: st
   doc.setFontSize(11);
   doc.text(title.toUpperCase(), x + 18, y + 24);
 
-  let rowY = y + 48;
+  const valueX = getInfoCardValueX(x, width);
+  let rowY = y + 42;
   rows.forEach((row, index) => {
     const isLast = index === rows.length - 1;
-    const valueLines = doc.splitTextToSize(row.value, width - 148);
-    const rowHeight = Math.max(18, valueLines.length * 12 + 6);
+    const valueLines = doc.splitTextToSize(row.value, getInfoCardValueWidth(width));
+    const rowHeight = Math.max(15, valueLines.length * 11 + 4);
 
     if (!isLast) {
       doc.setDrawColor(...PDF_THEME.border);
-      doc.line(x + 18, rowY + rowHeight + 4, x + width - 18, rowY + rowHeight + 4);
+      doc.line(x + 18, rowY + rowHeight + 3, x + width - 18, rowY + rowHeight + 3);
     }
 
     doc.setTextColor(...PDF_THEME.muted);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.text(row.label.toUpperCase(), x + 18, rowY + 10);
+    doc.text(row.label.toUpperCase(), x + 18, rowY + 9);
 
     doc.setTextColor(...PDF_THEME.ink);
     doc.setFont('helvetica', emphasizeLast && isLast ? 'bold' : 'normal');
     doc.setFontSize(emphasizeLast && isLast ? 12 : 10);
-    doc.text(valueLines, x + 112, rowY + 10);
+    doc.text(valueLines, valueX, rowY + 9);
 
-    rowY += rowHeight + 8;
+    rowY += rowHeight + 6;
   });
 }
 
@@ -402,6 +398,27 @@ function addFooter(doc: jsPDF, subscription: Subscription) {
   }
 }
 
+function getInfoCardValueWidth(width: number) {
+  const labelColumn = Math.min(132, Math.max(96, width * 0.24));
+  return width - labelColumn - 36;
+}
+
+function getFittedFontSize(doc: jsPDF, value: string, maxSize: number, minSize: number, maxWidth: number) {
+  for (let fontSize = maxSize; fontSize >= minSize; fontSize -= 1) {
+    doc.setFontSize(fontSize);
+    if (doc.getTextWidth(value) <= maxWidth) {
+      return fontSize;
+    }
+  }
+
+  return minSize;
+}
+
+function getInfoCardValueX(x: number, width: number) {
+  const labelColumn = Math.min(132, Math.max(96, width * 0.24));
+  return x + 18 + labelColumn;
+}
+
 function sanitizeFileName(value: string) {
   return value
     .split('')
@@ -438,6 +455,10 @@ function formatCadence(subscription: Subscription) {
   }
 
   return `Every ${plan.intervalCount} ${plan.intervalUnit}s`;
+}
+
+function formatPdfCurrency(value: string | number) {
+  return formatCurrency(value).replace('₹', 'INR ');
 }
 
 function formatAddress(

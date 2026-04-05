@@ -1,7 +1,8 @@
+import { SubscriptionStatus } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { createInternalUserSchema } from '@subscription/shared';
 import argon2 from 'argon2';
 import { Router } from 'express';
-import { Prisma, SubscriptionStatus } from '@prisma/client';
 import { z } from 'zod';
 
 import { AppError } from '../../lib/errors.js';
@@ -47,7 +48,11 @@ const userInclude = {
   }
 };
 
-function mapUser(user: any) {
+type UserWithRelations = Prisma.UserGetPayload<{
+  include: typeof userInclude;
+}>;
+
+function mapUser(user: UserWithRelations) {
   return {
     id: user.id,
     email: user.email,

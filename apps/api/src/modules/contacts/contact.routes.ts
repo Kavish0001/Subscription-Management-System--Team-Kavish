@@ -1,4 +1,5 @@
-import { Prisma, SubscriptionStatus } from '@prisma/client';
+import { SubscriptionStatus } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -60,7 +61,11 @@ const contactInclude = {
   }
 };
 
-function mapContact(contact: any) {
+type ContactWithRelations = Prisma.ContactGetPayload<{
+  include: typeof contactInclude;
+}>;
+
+function mapContact(contact: ContactWithRelations) {
   return {
     id: contact.id,
     userId: contact.userId,
