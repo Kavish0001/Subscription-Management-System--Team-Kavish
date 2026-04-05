@@ -210,8 +210,13 @@ export function RecurringPlanListPage() {
             </td>
             <td className="px-4 py-3 text-slate-300">{formatDate(plan.updatedAt)}</td>
             <td className="px-4 py-3">
-              <button className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200" onClick={() => deleteMutation.mutate(plan.id)} type="button">
-                Delete
+              <button
+                className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(plan.id)}
+                type="button"
+              >
+                {deleteMutation.isPending && deleteMutation.variables === plan.id ? 'Deleting...' : 'Delete'}
               </button>
             </td>
           </tr>
@@ -441,8 +446,13 @@ export function DiscountListPage() {
             </td>
             <td className="px-4 py-3 text-slate-300">{formatDate(discount.updatedAt ?? discount.createdAt)}</td>
             <td className="px-4 py-3">
-              <button className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200" onClick={() => deleteMutation.mutate(discount.id)} type="button">
-                Delete
+              <button
+                className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(discount.id)}
+                type="button"
+              >
+                {deleteMutation.isPending && deleteMutation.variables === discount.id ? 'Deleting...' : 'Delete'}
               </button>
             </td>
           </tr>

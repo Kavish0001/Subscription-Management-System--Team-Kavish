@@ -59,6 +59,9 @@ function parseId(value: unknown, label: string) {
 
 configurationRouter.get('/attributes', requireAuth, requireRole('admin'), async (_request, response) => {
   const attributes = await prisma.productAttribute.findMany({
+    where: {
+      isActive: true
+    },
     include: {
       values: {
         where: {
@@ -246,6 +249,9 @@ configurationRouter.delete('/attributes/:id', requireAuth, requireRole('admin'),
 
 configurationRouter.get('/quotation-templates', requireAuth, requireRole('admin'), async (_request, response) => {
   const templates = await prisma.quotationTemplate.findMany({
+    where: {
+      isActive: true
+    },
     include: {
       recurringPlan: true,
       lines: {
@@ -426,6 +432,9 @@ configurationRouter.delete('/quotation-templates/:id', requireAuth, requireRole(
 
 configurationRouter.get('/payment-terms', requireAuth, requireRole('admin'), async (_request, response) => {
   const paymentTerms = await prisma.paymentTerm.findMany({
+    where: {
+      isActive: true
+    },
     orderBy: [{ createdAt: 'desc' }]
   });
 

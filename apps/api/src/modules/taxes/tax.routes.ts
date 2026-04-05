@@ -12,6 +12,9 @@ taxesRouter.use(requireAuth);
 
 taxesRouter.get('/taxes', requireRole('admin', 'internal_user'), async (_request, response) => {
   const taxes = await prisma.taxRule.findMany({
+    where: {
+      isActive: true
+    },
     orderBy: { createdAt: 'desc' }
   });
 

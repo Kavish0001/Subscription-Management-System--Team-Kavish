@@ -166,11 +166,12 @@ export function TaxListPage() {
                 <td className="px-4 py-3 muted">{formatDate(tax.updatedAt ?? tax.createdAt)}</td>
                 <td className="px-4 py-3">
                   <button
-                    className="app-btn app-btn-danger px-3 py-1 text-xs"
+                    className="app-btn app-btn-danger px-3 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={deleteMutation.isPending}
                     onClick={() => deleteMutation.mutate(tax.id)}
                     type="button"
                   >
-                    Delete
+                    {deleteMutation.isPending && deleteMutation.variables === tax.id ? 'Deleting...' : 'Delete'}
                   </button>
                 </td>
               </tr>

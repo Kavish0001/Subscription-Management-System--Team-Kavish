@@ -15,8 +15,6 @@ import { requireAuth, requireRole, type AuthenticatedRequest } from '../../middl
 
 export const catalogRouter = Router();
 
-catalogRouter.use(requireAuth);
-
 const truthyQuerySchema = z
   .enum(['true', 'false'])
   .transform((value) => value === 'true');
@@ -589,6 +587,51 @@ catalogRouter.get('/products/:slug', async (request, response, next) => {
   }
 });
 
+catalogRouter.get('/recurring-plans', async (_request, response) => {
+  const plans = await prisma.recurringPlan.findMany({
+    where: {
+      isActive: true
+    },
+    include: {
+      _count: {
+        select: {
+          productPricing: true,
+          subscriptions: true,
+          quotationTemplates: true
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  response.json({
+    data: plans.map((plan) => ({
+      id: plan.id,
+      name: plan.name,
+      intervalCount: plan.intervalCount,
+      intervalUnit: plan.intervalUnit,
+      price: plan.price,
+      minimumQuantity: plan.minimumQuantity,
+      startDate: plan.startDate,
+      endDate: plan.endDate,
+      autoCloseEnabled: plan.autoCloseEnabled,
+      autoCloseAfterCount: plan.autoCloseAfterCount,
+      autoCloseAfterUnit: plan.autoCloseAfterUnit,
+      isClosable: plan.isClosable,
+      isPausable: plan.isPausable,
+      isRenewable: plan.isRenewable,
+      isActive: plan.isActive,
+      productsCount: plan._count.productPricing,
+      subscriptionsCount: plan._count.subscriptions,
+      templatesCount: plan._count.quotationTemplates,
+      createdAt: plan.createdAt,
+      updatedAt: plan.updatedAt
+    }))
+  });
+});
+
+catalogRouter.use(requireAuth);
+
 catalogRouter.get('/admin/products', requireRole('admin'), async (request, response, next) => {
   try {
     const { page, pageSize, search, sortBy, productType, hasRecurringPrices, hasVariants, hasMedia, isActive } =
@@ -781,46 +824,6 @@ catalogRouter.post('/products', requireRole('admin'), async (request, response, 
   }
 });
 
-catalogRouter.get('/recurring-plans', async (_request, response) => {
-  const plans = await prisma.recurringPlan.findMany({
-    include: {
-      _count: {
-        select: {
-          productPricing: true,
-          subscriptions: true,
-          quotationTemplates: true
-        }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
-
-  response.json({
-    data: plans.map((plan) => ({
-      id: plan.id,
-      name: plan.name,
-      intervalCount: plan.intervalCount,
-      intervalUnit: plan.intervalUnit,
-      price: plan.price,
-      minimumQuantity: plan.minimumQuantity,
-      startDate: plan.startDate,
-      endDate: plan.endDate,
-      autoCloseEnabled: plan.autoCloseEnabled,
-      autoCloseAfterCount: plan.autoCloseAfterCount,
-      autoCloseAfterUnit: plan.autoCloseAfterUnit,
-      isClosable: plan.isClosable,
-      isPausable: plan.isPausable,
-      isRenewable: plan.isRenewable,
-      isActive: plan.isActive,
-      productsCount: plan._count.productPricing,
-      subscriptionsCount: plan._count.subscriptions,
-      templatesCount: plan._count.quotationTemplates,
-      createdAt: plan.createdAt,
-      updatedAt: plan.updatedAt
-    }))
-  });
-});
-
 catalogRouter.post('/recurring-plans', requireRole('admin', 'internal_user'), async (request, response, next) => {
   try {
     const payload = recurringPlanSchema.parse(request.body);
@@ -877,6 +880,9 @@ catalogRouter.delete('/recurring-plans/:id', requireRole('admin'), async (reques
 
 catalogRouter.get('/discounts', requireRole('admin', 'internal_user'), async (_request, response) => {
   const discounts = await prisma.discountRule.findMany({
+    where: {
+      isActive: true
+    },
     include: {
       products: {
         include: {

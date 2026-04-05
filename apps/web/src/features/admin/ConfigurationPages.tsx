@@ -188,8 +188,13 @@ export function AttributeListPage() {
             <td className="px-4 py-3">{entry.isActive ? 'Active' : 'Archived'}</td>
             <td className="px-4 py-3 text-slate-300">{formatDate(entry.updatedAt)}</td>
             <td className="px-4 py-3">
-              <button className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200" onClick={() => deleteMutation.mutate(entry.id)} type="button">
-                Delete
+              <button
+                className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(entry.id)}
+                type="button"
+              >
+                {deleteMutation.isPending && deleteMutation.variables === entry.id ? 'Deleting...' : 'Delete'}
               </button>
             </td>
           </tr>
@@ -304,8 +309,13 @@ export function PaymentTermListPage() {
             <td className="px-4 py-3">{entry.isActive ? 'Active' : 'Archived'}</td>
             <td className="px-4 py-3 text-slate-300">{formatDate(entry.updatedAt)}</td>
             <td className="px-4 py-3">
-              <button className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200" onClick={() => deleteMutation.mutate(entry.id)} type="button">
-                Delete
+              <button
+                className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(entry.id)}
+                type="button"
+              >
+                {deleteMutation.isPending && deleteMutation.variables === entry.id ? 'Deleting...' : 'Delete'}
               </button>
             </td>
           </tr>
@@ -589,8 +599,13 @@ export function QuotationTemplateListPage() {
             </td>
             <td className="px-4 py-3 text-slate-300">{formatDate(entry.updatedAt)}</td>
             <td className="px-4 py-3">
-              <button className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200" onClick={() => deleteMutation.mutate(entry.id)} type="button">
-                Delete
+              <button
+                className="rounded-full border border-rose-400/25 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(entry.id)}
+                type="button"
+              >
+                {deleteMutation.isPending && deleteMutation.variables === entry.id ? 'Deleting...' : 'Delete'}
               </button>
             </td>
           </tr>
