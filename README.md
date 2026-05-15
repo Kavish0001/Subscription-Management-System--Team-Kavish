@@ -4,27 +4,6 @@ Veltrix is a full-stack **subscription management platform** for recurring billi
 
 > Built for the Subscription Management System hackathon problem statement, structured like a production-grade modular monolith.
 
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Repo Map](#repo-map)
-- [Backend Modules](#backend-modules)
-- [Frontend Routes](#frontend-routes)
-- [Payment Integration (Razorpay)](#payment-integration-razorpay)
-- [Email Integration](#email-integration)
-- [Database](#database)
-- [Local Development](#local-development)
-- [Environment Variables](#environment-variables)
-- [Scripts](#scripts)
-- [Testing & Quality](#testing--quality)
-- [CI/CD](#cicd)
-
----
-
 ## Features
 
 ### Authentication & Users
